@@ -1,35 +1,30 @@
 import { AuthClient } from '@dfinity/auth-client';
 import { Actor, HttpAgent } from '@dfinity/agent';
 import { idlFactory as secureNotesIDL } from '../declarations/secure_notes.js';
-import { initCrypto, generateKeyPair, encryptWithPublicKey } from './crypto';
+import { generateKeyPair, encryptWithPublicKey } from './crypto';
 
 // Constants
 const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'your-canister-id';
-const HOST = process.env.REACT_APP_IC_HOST || 'https://ic0.app';
+const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai';
+const HOST = process.env.REACT_APP_IC_HOST || 'http://localhost:4943';
 
 // Initialize the Auth Client
 let authClient;
 let secureNotesActor;
-let cryptoInitialized = false;
 
-// Try to initialize crypto module
+// crypto.jsからinitCryptoが削除されたため、この関数も調整する
 export const ensureCryptoInit = async () => {
-  if (!cryptoInitialized) {
-    try {
-      cryptoInitialized = initCrypto();
-      if (!cryptoInitialized) {
-        console.error('Failed to initialize crypto module');
-      }
-    } catch (error) {
-      console.error('Error initializing crypto module:', error);
-    }
+  try {
+    // 直接trueを返す（crypto.jsで自動テストが行われるようになった）
+    return true;
+  } catch (error) {
+    console.error('Error in crypto module:', error);
+    return false;
   }
-  return cryptoInitialized;
 };
 
 export const initAuth = async () => {
-  // Make sure crypto is initialized
+  // クリプト初期化チェック - 念のため残しておく
   await ensureCryptoInit();
   
   if (!authClient) {
@@ -51,9 +46,9 @@ export const isAuthenticated = async () => {
 export const login = async () => {
   const client = await initAuth();
   
-  // Make sure crypto is initialized before generating keys
+  // クリプトモジュールの初期化チェック - 機能的には不要になったが、ログのために残す
   if (!await ensureCryptoInit()) {
-    throw new Error('Crypto module initialization failed');
+    console.warn('Crypto module initialization check failed, but continuing anyway');
   }
   
   // Generate device key pair for secure communication
