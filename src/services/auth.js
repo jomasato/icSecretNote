@@ -5,8 +5,8 @@ import { generateKeyPair, encryptWithPublicKey } from './crypto';
 
 // Constants
 const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai';
-const HOST = process.env.REACT_APP_IC_HOST || 'http://localhost:4943';
+const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'l6ye3-oqaaa-aaaao-qj52a-cai';
+const HOST = process.env.REACT_APP_IC_HOST || 'https://ic0.app';  // 本番環境のデフォルトを修正
 
 // Initialize the Auth Client
 let authClient;
@@ -63,13 +63,14 @@ export const login = async () => {
   
   return new Promise((resolve, reject) => {
     client.login({
-      identityProvider: `${HOST}/?canisterId=${II_CANISTER_ID}`,
+      // 本番環境用のII認証URLに修正
+      identityProvider: 'https://identity.ic0.app',
       onSuccess: async () => {
         const identity = client.getIdentity();
         const agent = new HttpAgent({ identity, host: HOST });
         
-        // In development, we need to fetch the root key
-        if (process.env.NODE_ENV !== 'production') {
+        // 本番環境ではfetchRootKeyは必要ない（メインネットではルートキーは信頼される）
+        if (HOST.includes('localhost') || HOST.includes('127.0.0.1')) {
           await agent.fetchRootKey();
         }
         
@@ -139,7 +140,8 @@ export const getActor = async () => {
       const identity = client.getIdentity();
       const agent = new HttpAgent({ identity, host: HOST });
       
-      if (process.env.NODE_ENV !== 'production') {
+      // 本番環境ではfetchRootKeyは必要ない
+      if (HOST.includes('localhost') || HOST.includes('127.0.0.1')) {
         await agent.fetchRootKey();
       }
       
