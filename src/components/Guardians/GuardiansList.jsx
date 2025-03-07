@@ -2,16 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { getGuardians, removeGuardian } from '../../services/api';
 import Loading from '../common/Loading';
 import AddGuardian from './AddGuardian';
+import RecoverySetup from '../Recovery/RecoverySetup';
 
 function GuardiansList() {
   const [guardians, setGuardians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
+  const [showRecoverySetup, setShowRecoverySetup] = useState(false);
+  const [recoveryEnabled, setRecoveryEnabled] = useState(false);
+  const [recoveryShares, setRecoveryShares] = useState([]);
 
   useEffect(() => {
     fetchGuardians();
+    checkRecoveryStatus();
   }, []);
+
+  // リカバリー状態の確認
+  const checkRecoveryStatus = () => {
+    // シェア情報の取得
+    const sharesJson = localStorage.getItem('recoveryShares');
+    if (sharesJson) {
+      try {
+        const shares = JSON.parse(sharesJson);
+        setRecoveryShares(shares);
+        
+        // リカバリーが有効かどうかを確認（シェアが存在するかどうか）
+        setRecoveryEnabled(shares.length > 0);
+      } catch (err) {
+        console.error('Failed to parse recovery shares:', err);
+      }
+    }
+  };
 
   const fetchGuardians = async () => {
     setLoading(true);
@@ -19,6 +41,11 @@ function GuardiansList() {
       const fetchedGuardians = await getGuardians();
       setGuardians(fetchedGuardians);
       setError(null);
+      
+      // ガーディアン数からもリカバリー状態を更新
+      if (fetchedGuardians.length > 0) {
+        setRecoveryEnabled(true);
+      }
     } catch (err) {
       console.error('Failed to fetch guardians:', err);
       setError('Failed to load guardians. Please try again.');
@@ -32,7 +59,7 @@ function GuardiansList() {
       setLoading(true);
       try {
         await removeGuardian(principal);
-        // Update the local state
+        // ローカルステートを更新
         setGuardians(guardians.filter(g => g.principal !== principal));
       } catch (err) {
         console.error('Failed to remove guardian:', err);
@@ -44,20 +71,33 @@ function GuardiansList() {
   };
 
   const handleAddGuardian = () => {
-    setShowAddGuardian(true);
+    // リカバリーがセットアップされていなければ、まずセットアップを行う
+    if (!recoveryEnabled) {
+      setShowRecoverySetup(true);
+    } else {
+      setShowAddGuardian(true);
+    }
+  };
+
+  const handleRecoverySetupComplete = (shares) => {
+    setRecoveryShares(shares);
+    setRecoveryEnabled(true);
+    setShowRecoverySetup(false);
+    setShowAddGuardian(true); // リカバリーセットアップ後にガーディアン追加へ
   };
 
   const handleCloseAddGuardian = () => {
     setShowAddGuardian(false);
-    // Refresh the list after adding a guardian
+    // ガーディアン追加後にリストを更新
     fetchGuardians();
+    checkRecoveryStatus();
   };
 
   if (loading && guardians.length === 0) {
     return <Loading />;
   }
 
-  // Helper function to format principal ID for display
+  // ガーディアンIDを表示用にフォーマット
   const formatPrincipal = (principal) => {
     if (!principal) return '';
     if (principal.length <= 10) return principal;
@@ -81,7 +121,7 @@ function GuardiansList() {
           <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
-          Add Guardian
+          {recoveryEnabled ? 'Add Guardian' : 'Set Up Recovery'}
         </button>
       </div>
 
@@ -96,6 +136,15 @@ function GuardiansList() {
           <li>Guardians can't access your notes without your permission</li>
           <li>Choose guardians wisely - people you trust and can easily contact</li>
         </ul>
+        
+        {recoveryEnabled && (
+          <div className="bg-green-50 border border-green-200 rounded p-3 mt-4">
+            <p className="text-sm text-green-800">
+              <span className="font-medium">Recovery status:</span> Enabled
+              {recoveryShares.length > 0 && ` (${recoveryShares.length} unused shares available)`}
+            </p>
+          </div>
+        )}
       </div>
 
       {guardians.length === 0 ? (
@@ -105,7 +154,9 @@ function GuardiansList() {
           </svg>
           <h3 className="mt-2 text-lg font-medium text-gray-900">No guardians set up</h3>
           <p className="mt-1 text-gray-500">
-            To enable account recovery, you need to add trusted guardians.
+            {recoveryEnabled 
+              ? 'You have set up recovery but haven\'t added any guardians yet.'
+              : 'To enable account recovery, you need to add trusted guardians.'}
           </p>
           <div className="mt-6">
             <button
@@ -115,7 +166,7 @@ function GuardiansList() {
               <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              Add your first guardian
+              {recoveryEnabled ? 'Add your first guardian' : 'Set up recovery'}
             </button>
           </div>
         </div>
@@ -179,10 +230,21 @@ function GuardiansList() {
         </div>
       )}
 
+      {showRecoverySetup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md">
+            <RecoverySetup onSetupComplete={handleRecoverySetupComplete} />
+          </div>
+        </div>
+      )}
+
       {showAddGuardian && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md">
-            <AddGuardian onClose={handleCloseAddGuardian} />
+            <AddGuardian 
+              onClose={handleCloseAddGuardian} 
+              availableShares={recoveryShares}
+            />
           </div>
         </div>
       )}

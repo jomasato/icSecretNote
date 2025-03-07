@@ -1,3 +1,5 @@
+//src/services/crypto.js
+
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
 import md5 from 'blueimp-md5';
@@ -53,19 +55,32 @@ const simpleShamir = {
   }
 };
 
-// Generate a random key for encryption
+/**
+ * 暗号化用のランダムキーを生成
+ * @returns {string} 生成されたキー
+ */
 export const generateEncryptionKey = () => {
-  // Generate a random 256-bit key (32 bytes)
+  // 256ビット(32バイト)のランダムキーを生成
   return CryptoJS.lib.WordArray.random(32).toString();
 };
 
-// Encrypt data with a key
+/**
+ * データをキーで暗号化
+ * @param {any} data - 暗号化するデータ
+ * @param {string} key - 暗号化キー
+ * @returns {string} 暗号化されたデータ
+ */
 export const encryptWithKey = (data, key) => {
   const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), key).toString();
   return encrypted;
 };
 
-// Decrypt data with a key
+/**
+ * 暗号化されたデータをキーで復号
+ * @param {string} encryptedData - 暗号化されたデータ
+ * @param {string} key - 復号キー
+ * @returns {any} 復号されたデータ
+ */
 export const decryptWithKey = (encryptedData, key) => {
   try {
     const decrypted = CryptoJS.AES.decrypt(encryptedData, key);
@@ -76,44 +91,60 @@ export const decryptWithKey = (encryptedData, key) => {
   }
 };
 
-// Convert string to Blob for IC storage
+/**
+ * 文字列をBlobに変換
+ * @param {string} str - 変換する文字列
+ * @returns {Uint8Array} 変換されたBlob
+ */
 export const stringToBlob = (str) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(str);
   return new Uint8Array(data);
 };
 
-// Convert Blob to string from IC storage
+/**
+ * BlobをStringに変換
+ * @param {Uint8Array} blob - 変換するBlob
+ * @returns {string} 変換された文字列
+ */
 export const blobToString = (blob) => {
   if (!blob || !(blob instanceof Uint8Array)) {
     console.error('Invalid blob passed to blobToString:', blob);
-    return String(blob); // Fallback to String conversion
+    return String(blob); // 例外的にString変換
   }
   const decoder = new TextDecoder();
   return decoder.decode(blob);
 };
 
-// Generate a key pair for device authentication
+/**
+ * デバイス認証用のキーペアを生成
+ * @returns {Object} キーペア（publicKey, privateKey）
+ */
 export const generateKeyPair = () => {
-  // In a real app, use asymmetric encryption like RSA
-  // For this demo, we'll create a simple pair
+  // 実際のアプリではRSAなどの非対称暗号を使用
+  // このデモでは簡易的な実装
   const privateKey = CryptoJS.lib.WordArray.random(32).toString();
-  // 直接文字列として返す
-  const publicKey = md5(privateKey); // This is just for demo. In reality, use proper public key crypto
+  // md5を使用して公開鍵をシミュレート
+  const publicKey = stringToBlob(md5(privateKey));
   
   return {
     privateKey,
-    publicKey, // 文字列として返す
+    publicKey,
   };
 };
 
-// Encrypt with a "public key" (simplified)
+/**
+ * 公開鍵でデータを暗号化
+ * @param {any} data - 暗号化するデータ
+ * @param {Uint8Array} publicKey - 公開鍵
+ * @returns {Uint8Array} 暗号化されたデータ
+ */
 export const encryptWithPublicKey = (data, publicKey) => {
-  // publicKeyが文字列であることを確認
+  // 公開鍵が文字列かBlobか確認
   const publicKeyStr = typeof publicKey === 'string' ? publicKey : blobToString(publicKey);
   
-  // In a real app, use asymmetric encryption
-  // For this demo, we'll simulate it
+  // 実際のアプリでは非対称暗号を使用
+  // このデモではシミュレート
   const encryptionKey = generateEncryptionKey();
   const encryptedData = encryptWithKey(data, encryptionKey);
   const encryptedKey = CryptoJS.AES.encrypt(encryptionKey, publicKeyStr).toString();
@@ -124,28 +155,44 @@ export const encryptWithPublicKey = (data, publicKey) => {
   }));
 };
 
-// Decrypt with a "private key" (simplified)
+/**
+ * 秘密鍵でデータを復号
+ * @param {Uint8Array} encryptedBlob - 暗号化されたデータ
+ * @param {string} privateKey - 秘密鍵
+ * @returns {any} 復号されたデータ
+ */
 export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
-  const dataStr = blobToString(encryptedBlob);
-  const { encryptedData, encryptedKey } = JSON.parse(dataStr);
-  
-  // Decrypt the key with the private key
-  const decryptedKey = CryptoJS.AES.decrypt(encryptedKey, privateKey).toString(CryptoJS.enc.Utf8);
-  
-  // Use the decrypted key to decrypt the data
-  return decryptWithKey(encryptedData, decryptedKey);
+  try {
+    const dataStr = blobToString(encryptedBlob);
+    const { encryptedData, encryptedKey } = JSON.parse(dataStr);
+    
+    // 秘密鍵を使ってキーを復号
+    const decryptedKey = CryptoJS.AES.decrypt(encryptedKey, privateKey).toString(CryptoJS.enc.Utf8);
+    
+    // 復号したキーでデータを復号
+    return decryptWithKey(encryptedData, decryptedKey);
+  } catch (error) {
+    console.error('Failed to decrypt with private key:', error);
+    throw error;
+  }
 };
 
-// Split a secret into shares using simplified Shamir's Secret Sharing
+/**
+ * 秘密を複数のシェアに分割
+ * @param {string} secret - 分割する秘密情報
+ * @param {number} totalShares - 総シェア数
+ * @param {number} threshold - 必要なシェア数
+ * @returns {Array} シェアの配列
+ */
 export const createShares = (secret, totalShares, threshold) => {
   try {
-    // Convert the secret to hex format
+    // 秘密情報をHEX形式に変換
     const hexSecret = CryptoJS.enc.Hex.stringify(CryptoJS.enc.Utf8.parse(secret));
     
-    // Generate shares using our simplified implementation
+    // 簡易実装を使用してシェアを生成
     const shares = simpleShamir.share(hexSecret, totalShares, threshold);
     
-    // Return the shares with IDs
+    // シェアにIDを付与して返す
     return shares.map(share => ({
       id: `share-${uuidv4()}`,
       value: share
@@ -156,16 +203,20 @@ export const createShares = (secret, totalShares, threshold) => {
   }
 };
 
-// Combine shares to reconstruct the secret
+/**
+ * シェアを結合して秘密を復元
+ * @param {Array} shares - シェアの配列
+ * @returns {string} 復元された秘密情報
+ */
 export const combineShares = (shares) => {
   try {
-    // Extract just the share values
+    // シェアの値だけを抽出
     const shareValues = shares.map(share => share.value || share);
     
-    // Combine the shares using our simplified implementation
+    // 簡易実装を使用してシェアを結合
     const combined = simpleShamir.combine(shareValues);
     
-    // Convert from hex back to string
+    // HEXから文字列に変換
     return CryptoJS.enc.Utf8.stringify(CryptoJS.enc.Hex.parse(combined));
   } catch (error) {
     console.error('Failed to combine shares:', error);
@@ -173,12 +224,246 @@ export const combineShares = (shares) => {
   }
 };
 
-// Generate recovery data
+/**
+ * 暗号化キーをIndexedDBに安全に保存
+ * @param {string} masterKey - マスター暗号化キー
+ * @param {string} password - パスワード
+ * @returns {Promise<boolean>} 成功した場合はtrue
+ */
+export const storeEncryptionKeySecurely = async (masterKey, password) => {
+  try {
+    // パスワードからキーを派生
+    const salt = window.crypto.getRandomValues(new Uint8Array(16));
+    const keyMaterial = await window.crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      { name: "PBKDF2" },
+      false,
+      ["deriveBits", "deriveKey"]
+    );
+    
+    const derivedKey = await window.crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt"]
+    );
+    
+    // マスターキーを暗号化
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encryptedData = await window.crypto.subtle.encrypt(
+      {
+        name: "AES-GCM",
+        iv,
+      },
+      derivedKey,
+      new TextEncoder().encode(masterKey)
+    );
+    
+    // 暗号化データを保存形式に変換
+    const secureData = {
+      encryptedKey: Array.from(new Uint8Array(encryptedData)),
+      salt: Array.from(salt),
+      iv: Array.from(iv),
+      version: 1
+    };
+    
+    // IndexedDBに保存
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('SecureNotesStorage', 1);
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('keys')) {
+          db.createObjectStore('keys', { keyPath: 'id' });
+        }
+      };
+      
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction(['keys'], 'readwrite');
+        const objectStore = transaction.objectStore('keys');
+        
+        const storeRequest = objectStore.put({
+          id: 'masterKey',
+          data: secureData
+        });
+        
+        storeRequest.onsuccess = () => resolve(true);
+        storeRequest.onerror = () => {
+          console.error('Failed to store encrypted key in IndexedDB');
+          
+          // IndexedDBが使用できない場合、一時的な代替策としてlocalStorageに保存
+          // 注: 本番環境ではより安全な方法を検討する必要あり
+          localStorage.setItem('masterEncryptionKey', masterKey);
+          
+          resolve(false);
+        };
+      };
+      
+      request.onerror = () => {
+        console.error('Failed to open IndexedDB');
+        
+        // IndexedDBが使用できない場合、一時的な代替策としてlocalStorageに保存
+        localStorage.setItem('masterEncryptionKey', masterKey);
+        
+        resolve(false);
+      };
+    });
+  } catch (error) {
+    console.error('Error storing encryption key:', error);
+    
+    // エラー発生時、一時的な代替策としてlocalStorageに保存
+    localStorage.setItem('masterEncryptionKey', masterKey);
+    
+    return false;
+  }
+};
+
+/**
+ * IndexedDBから暗号化キーを安全に取得
+ * @param {string} password - パスワード
+ * @returns {Promise<string>} 復号されたマスターキー
+ */
+export const retrieveEncryptionKeySecurely = async (password) => {
+  try {
+    // IndexedDBからキーを取得
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('SecureNotesStorage', 1);
+      
+      request.onsuccess = async (event) => {
+        try {
+          const db = event.target.result;
+          const transaction = db.transaction(['keys'], 'readonly');
+          const objectStore = transaction.objectStore('keys');
+          
+          const getRequest = objectStore.get('masterKey');
+          
+          getRequest.onsuccess = async () => {
+            if (!getRequest.result) {
+              // キーが見つからない場合、localStorageを確認
+              const masterKey = localStorage.getItem('masterEncryptionKey');
+              if (masterKey) {
+                resolve(masterKey);
+                return;
+              }
+              
+              reject(new Error('No encryption key found'));
+              return;
+            }
+            
+            const secureData = getRequest.result.data;
+            
+            // 復号に必要な値を準備
+            const encryptedKey = new Uint8Array(secureData.encryptedKey);
+            const salt = new Uint8Array(secureData.salt);
+            const iv = new Uint8Array(secureData.iv);
+            
+            // パスワードからキーを派生
+            const keyMaterial = await window.crypto.subtle.importKey(
+              "raw",
+              new TextEncoder().encode(password),
+              { name: "PBKDF2" },
+              false,
+              ["deriveBits", "deriveKey"]
+            );
+            
+            const derivedKey = await window.crypto.subtle.deriveKey(
+              {
+                name: "PBKDF2",
+                salt,
+                iterations: 100000,
+                hash: "SHA-256",
+              },
+              keyMaterial,
+              { name: "AES-GCM", length: 256 },
+              false,
+              ["decrypt"]
+            );
+            
+            // マスターキーを復号
+            const decryptedData = await window.crypto.subtle.decrypt(
+              {
+                name: "AES-GCM",
+                iv,
+              },
+              derivedKey,
+              encryptedKey
+            );
+            
+            resolve(new TextDecoder().decode(decryptedData));
+          };
+          
+          getRequest.onerror = () => {
+            console.error('Failed to retrieve key from IndexedDB');
+            
+            // IndexedDBでエラーが発生した場合、localStorageを確認
+            const masterKey = localStorage.getItem('masterEncryptionKey');
+            if (masterKey) {
+              resolve(masterKey);
+              return;
+            }
+            
+            reject(new Error('Failed to retrieve encryption key'));
+          };
+        } catch (error) {
+          console.error('Error in IndexedDB transaction:', error);
+          
+          // エラー時はlocalStorageを確認
+          const masterKey = localStorage.getItem('masterEncryptionKey');
+          if (masterKey) {
+            resolve(masterKey);
+            return;
+          }
+          
+          reject(error);
+        }
+      };
+      
+      request.onerror = () => {
+        console.error('Failed to open IndexedDB');
+        
+        // IndexedDBが開けない場合、localStorageを確認
+        const masterKey = localStorage.getItem('masterEncryptionKey');
+        if (masterKey) {
+          resolve(masterKey);
+          return;
+        }
+        
+        reject(new Error('Failed to open database'));
+      };
+    });
+  } catch (error) {
+    console.error('Error retrieving encryption key:', error);
+    
+    // エラー時の最終手段としてlocalStorageを確認
+    const masterKey = localStorage.getItem('masterEncryptionKey');
+    if (masterKey) {
+      return masterKey;
+    }
+    
+    throw error;
+  }
+};
+
+/**
+ * リカバリーデータを生成
+ * @param {string} encryptionKey - マスター暗号化キー
+ * @param {number} totalGuardians - 総ガーディアン数
+ * @param {number} requiredShares - リカバリーに必要なシェア数
+ * @returns {Object} 生成されたリカバリーデータ
+ */
 export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShares) => {
-  // Create shares of the encryption key
+  // シェアを作成
   const shares = createShares(encryptionKey, totalGuardians, requiredShares);
   
-  // Public recovery data includes information needed for recovery
+  // 公開リカバリーデータ
   const publicRecoveryData = {
     version: 1,
     createdAt: new Date().toISOString(),

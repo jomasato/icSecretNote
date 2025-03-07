@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Principal } from '@dfinity/principal';
-import { setupRecovery, addGuardian } from '../../services/api';
-import { createShares } from '../../services/crypto';
+import { addGuardian, getGuardianPublicKey, saveGuardianPublicKey } from '../../services/api';
 
-function AddGuardian({ onClose }) {
+function AddGuardian({ onClose, availableShares }) {
   const [guardianId, setGuardianId] = useState('');
+  const [guardianPublicKey, setGuardianPublicKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState(1);
@@ -12,84 +12,65 @@ function AddGuardian({ onClose }) {
   const [selectedShare, setSelectedShare] = useState(null);
 
   useEffect(() => {
-    // Check if we have shares in localStorage
-    const sharesJson = localStorage.getItem('recoveryShares');
-    if (sharesJson) {
-      try {
-        const shares = JSON.parse(sharesJson);
-        setRecoveryShares(shares);
-      } catch (err) {
-        console.error('Failed to parse recovery shares:', err);
-        // If we can't parse the shares, we'll need to create new ones
-        initializeRecoveryShares();
-      }
+    // 利用可能なシェアをpropsから取得、またはlocalStorageから取得
+    if (availableShares && availableShares.length > 0) {
+      setRecoveryShares(availableShares);
     } else {
-      // No shares found, initialize recovery
-      initializeRecoveryShares();
-    }
-  }, []);
-
-  const initializeRecoveryShares = async () => {
-    setLoading(true);
-    try {
-      // Default to 3 of 5 scheme (3 guardians needed out of 5 total)
-      const totalGuardians = 5;
-      const requiredShares = 3;
-      
-      // Get master key from localStorage
-      const masterKey = localStorage.getItem('masterEncryptionKey');
-      if (!masterKey) {
-        throw new Error('Master encryption key not found');
+      // localStorageからシェアを取得
+      const sharesJson = localStorage.getItem('recoveryShares');
+      if (sharesJson) {
+        try {
+          const shares = JSON.parse(sharesJson);
+          setRecoveryShares(shares);
+        } catch (err) {
+          console.error('Failed to parse recovery shares:', err);
+          setError('Failed to load recovery shares. Please set up recovery first.');
+        }
+      } else {
+        setError('No recovery shares available. Please set up recovery first.');
       }
-      
-      // Create shares
-      const shares = createShares(masterKey, totalGuardians, requiredShares);
-      
-      // Save shares to localStorage
-      localStorage.setItem('recoveryShares', JSON.stringify(shares));
-      setRecoveryShares(shares);
-      
-      // Setup recovery on the backend
-      await setupRecovery(totalGuardians, requiredShares);
-    } catch (err) {
-      console.error('Failed to initialize recovery shares:', err);
-      setError('Failed to initialize recovery setup. Please try again.');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [availableShares]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     
-    // Validate guardian ID
-    try {
-      // Try to parse the principal ID to make sure it's valid
-      Principal.fromText(guardianId);
-    } catch (err) {
-      setError('Invalid guardian ID. Please enter a valid Internet Identity principal.');
-      return;
-    }
-    
     if (step === 1) {
-      // Move to share selection step
-      setStep(2);
+      // ガーディアンIDの検証
+      try {
+        Principal.fromText(guardianId);
+        
+        // 次のステップ（公開鍵入力）へ
+        setStep(2);
+      } catch (err) {
+        setError('Invalid guardian ID. Please enter a valid Internet Identity principal.');
+      }
+    } else if (step === 2) {
+      // 公開鍵の検証
+      if (!guardianPublicKey.trim()) {
+        setError('Guardian public key is required');
+        return;
+      }
+      
+      // シェア選択ステップへ
+      setStep(3);
     } else {
+      // シェア割り当てとガーディアン追加
       setLoading(true);
       try {
         if (!selectedShare) {
           throw new Error('Please select a share to assign to this guardian');
         }
         
-        // Add guardian with the selected share
-        await addGuardian(guardianId, selectedShare);
+        // ガーディアン追加とシェア割り当て
+        await addGuardian(guardianId, guardianPublicKey, selectedShare);
         
-        // Update the recoveryShares in localStorage to mark this share as used
+        // 利用可能なシェアを更新
         const updatedShares = recoveryShares.filter(share => share.id !== selectedShare.id);
         localStorage.setItem('recoveryShares', JSON.stringify(updatedShares));
         
-        // Close the modal
+        // モーダルを閉じる
         onClose();
       } catch (err) {
         console.error('Failed to add guardian:', err);
@@ -104,7 +85,9 @@ function AddGuardian({ onClose }) {
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">
-          {step === 1 ? 'Add Guardian' : 'Assign Recovery Share'}
+          {step === 1 ? 'Add Guardian' : 
+           step === 2 ? 'Guardian Public Key' :
+           'Assign Recovery Share'}
         </h2>
         <button
           onClick={onClose}
@@ -156,10 +139,10 @@ function AddGuardian({ onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={loading || !guardianId}
+                disabled={!guardianId}
                 className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               >
-                {loading ? 'Processing...' : 'Next'}
+                Next
               </button>
             </div>
           </form>
@@ -167,6 +150,51 @@ function AddGuardian({ onClose }) {
       )}
 
       {step === 2 && (
+        <>
+          <p className="text-gray-600 mb-4">
+            Enter the public key of the guardian. The guardian can share this with you securely.
+          </p>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label htmlFor="guardianPublicKey" className="block text-gray-700 text-sm font-bold mb-2">
+                Guardian's Public Key
+              </label>
+              <textarea
+                id="guardianPublicKey"
+                value={guardianPublicKey}
+                onChange={(e) => setGuardianPublicKey(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="Paste the guardian's public key here"
+                rows={4}
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                The public key is used to encrypt their share securely.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={!guardianPublicKey}
+                className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Next
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+
+      {step === 3 && (
         <>
           <p className="text-gray-600 mb-4">
             Select a recovery share to assign to this guardian. Each share is a unique piece of your recovery key.
@@ -215,7 +243,7 @@ function AddGuardian({ onClose }) {
               <div className="flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
                 >
                   Back

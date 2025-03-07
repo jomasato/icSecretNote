@@ -1,21 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { isAuthenticated, login, logout, getCurrentPrincipal } from '../services/auth';
-import { generateEncryptionKey } from '../services/crypto';
 
+// 認証コンテキストの作成
 const AuthContext = createContext();
 
+// 認証コンテキストを使用するためのカスタムフック
 export function useAuth() {
   return useContext(AuthContext);
 }
 
+// 認証プロバイダーコンポーネント
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
+  // 初期化時に認証状態をチェック
   useEffect(() => {
-    checkAuthStatus();
-  }, []);
+    if (!initialized) {
+      checkAuthStatus();
+      setInitialized(true);
+    }
+  }, [initialized]);
 
+  // 認証状態確認
   async function checkAuthStatus() {
     setLoading(true);
     try {
@@ -26,12 +34,6 @@ export function AuthProvider({ children }) {
           principal: principal.toString(),
           isAuthenticated: true
         });
-        
-        // Check if we have a master encryption key, if not generate one
-        if (!localStorage.getItem('masterEncryptionKey')) {
-          const masterKey = generateEncryptionKey();
-          localStorage.setItem('masterEncryptionKey', masterKey);
-        }
       } else {
         setUser(null);
       }
@@ -43,20 +45,16 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ログイン処理
   async function handleLogin() {
     setLoading(true);
     try {
-      const { identity, deviceKeyPair } = await login();
-      const principal = identity.getPrincipal();
-      
-      // Set up the encryption key for the user
-      if (!localStorage.getItem('masterEncryptionKey')) {
-        const masterKey = generateEncryptionKey();
-        localStorage.setItem('masterEncryptionKey', masterKey);
-      }
+      // 簡略化のため、パスワードは空文字列で渡す（デモ環境でのみ）
+      const result = await login();
+      const principal = result.principal;
       
       setUser({
-        principal: principal.toString(),
+        principal: principal,
         isAuthenticated: true
       });
       
@@ -69,6 +67,7 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ログアウト処理
   async function handleLogout() {
     setLoading(true);
     try {
@@ -81,6 +80,7 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // コンテキスト値の作成
   const value = {
     user,
     loading,
@@ -88,6 +88,7 @@ export function AuthProvider({ children }) {
     logout: handleLogout,
   };
 
+  // プロバイダーでラップして値を提供
   return (
     <AuthContext.Provider value={value}>
       {children}
