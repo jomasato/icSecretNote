@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNotes } from '../../context/NotesContext';
 
 function NoteEditor({ note, onClose }) {
-  const { addNote, editNote } = useNotes();
+  const { addNote, editNote, noProfile } = useNotes();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +25,12 @@ function NoteEditor({ note, onClose }) {
     setError(null);
 
     try {
+      // プロファイルが存在するか確認
+      if (noProfile) {
+        setError('プロファイルが見つかりません。先にプロファイルを作成してください。');
+        return;
+      }
+
       let result;
       if (note && note.id) {
         // Editing an existing note
@@ -39,11 +45,11 @@ function NoteEditor({ note, onClose }) {
         setContent('');
         onClose();
       } else {
-        setError(result.error || 'Failed to save note. Please try again.');
+        setError(result.error || 'ノートの保存に失敗しました。もう一度お試しください。');
       }
     } catch (err) {
       console.error('Error saving note:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError('予期せぬエラーが発生しました。もう一度お試しください。');
     } finally {
       setLoading(false);
     }
@@ -53,7 +59,7 @@ function NoteEditor({ note, onClose }) {
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">
-          {note && note.id ? 'Edit Note' : 'New Note'}
+          {note && note.id ? 'ノートを編集' : '新規ノート'}
         </h2>
         <button
           onClick={onClose}
@@ -75,7 +81,7 @@ function NoteEditor({ note, onClose }) {
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
           <label htmlFor="title" className="block text-gray-700 text-sm font-bold mb-2">
-            Title
+            タイトル
           </label>
           <input
             type="text"
@@ -83,21 +89,21 @@ function NoteEditor({ note, onClose }) {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            placeholder="Note Title"
+            placeholder="ノートのタイトル"
             required
           />
         </div>
 
         <div className="mb-6">
           <label htmlFor="content" className="block text-gray-700 text-sm font-bold mb-2">
-            Content
+            内容
           </label>
           <textarea
             id="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-60"
-            placeholder="Write your note here..."
+            placeholder="ノートの内容を入力..."
             required
           />
         </div>
@@ -108,7 +114,7 @@ function NoteEditor({ note, onClose }) {
             onClick={onClose}
             className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
           >
-            Cancel
+            キャンセル
           </button>
           <button
             type="submit"
@@ -121,10 +127,10 @@ function NoteEditor({ note, onClose }) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Saving...
+                保存中...
               </span>
             ) : (
-              'Save Note'
+              'ノートを保存'
             )}
           </button>
         </div>

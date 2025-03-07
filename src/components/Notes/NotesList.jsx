@@ -5,11 +5,12 @@ import NoteEditor from './NoteEditor';
 import Loading from '../common/Loading';
 
 function NotesList() {
-  const { notes, loading, error, refreshNotes } = useNotes();
+  const { notes, loading, error, noProfile, refreshNotes, setupProfile } = useNotes();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOption, setSortOption] = useState('updated');
+  const [creatingProfile, setCreatingProfile] = useState(false);
 
   useEffect(() => {
     refreshNotes();
@@ -29,6 +30,64 @@ function NotesList() {
     setIsEditorOpen(false);
     setEditingNote(null);
   };
+
+  const handleCreateProfile = async () => {
+    setCreatingProfile(true);
+    try {
+      const result = await setupProfile();
+      if (!result.success) {
+        throw new Error(result.error || 'プロファイルの作成に失敗しました');
+      }
+    } catch (err) {
+      console.error('Profile creation failed:', err);
+    } finally {
+      setCreatingProfile(false);
+    }
+  };
+
+  // プロファイルがない場合の表示
+  if (noProfile) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">プロファイルが見つかりません</h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>
+                  アプリを使用するには、まずユーザープロファイルを作成する必要があります。
+                </p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={handleCreateProfile}
+                  disabled={creatingProfile}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  {creatingProfile ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      プロファイル作成中...
+                    </span>
+                  ) : (
+                    'プロファイルを作成'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Filter notes based on search term
   const filteredNotes = notes.filter(note => 
@@ -60,12 +119,12 @@ function NotesList() {
       )}
 
       <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">My Secure Notes</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">マイセキュアノート</h1>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full md:w-auto">
           <div className="relative">
             <input
               type="text"
-              placeholder="Search notes..."
+              placeholder="ノートを検索..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full sm:w-64 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -82,9 +141,9 @@ function NotesList() {
             onChange={(e) => setSortOption(e.target.value)}
             className="w-full sm:w-auto px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
           >
-            <option value="updated">Sort by Last Updated</option>
-            <option value="created">Sort by Created Date</option>
-            <option value="title">Sort by Title</option>
+            <option value="updated">最終更新日順</option>
+            <option value="created">作成日順</option>
+            <option value="title">タイトル順</option>
           </select>
           
           <button
@@ -94,7 +153,7 @@ function NotesList() {
             <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            Add Note
+            ノートを追加
           </button>
         </div>
       </div>
@@ -112,9 +171,9 @@ function NotesList() {
           <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <h3 className="mt-2 text-lg font-medium text-gray-900">No notes found</h3>
+          <h3 className="mt-2 text-lg font-medium text-gray-900">ノートが見つかりません</h3>
           <p className="mt-1 text-gray-500">
-            {searchTerm ? `No notes match your search "${searchTerm}"` : 'Get started by creating a new note'}
+            {searchTerm ? `"${searchTerm}"に一致するノートはありません` : '最初のノートを作成しましょう'}
           </p>
           {!searchTerm && (
             <div className="mt-6">
@@ -125,7 +184,7 @@ function NotesList() {
                 <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                Create a note
+                ノートを作成
               </button>
             </div>
           )}
