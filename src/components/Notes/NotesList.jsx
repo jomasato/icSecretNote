@@ -13,6 +13,7 @@ function NotesList() {
   const [creatingProfile, setCreatingProfile] = useState(false);
 
   useEffect(() => {
+    console.log("NotesList useEffect called");
     refreshNotes();
   }, [refreshNotes]);
 
@@ -32,9 +33,11 @@ function NotesList() {
   };
 
   const handleCreateProfile = async () => {
+    console.log("handleCreateProfile called");
     setCreatingProfile(true);
     try {
       const result = await setupProfile();
+      console.log("Profile setup result:", result);
       if (!result.success) {
         throw new Error(result.error || 'プロファイルの作成に失敗しました');
       }
@@ -45,8 +48,16 @@ function NotesList() {
     }
   };
 
+  console.log("NotesList render", {
+    loading,
+    notes: notes.length,
+    noProfile,
+    error
+  });
+
   // プロファイルがない場合の表示
   if (noProfile) {
+    console.log("Rendering no-profile view");
     return (
       <div className="container mx-auto p-4">
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
@@ -62,6 +73,11 @@ function NotesList() {
                 <p>
                   アプリを使用するには、まずユーザープロファイルを作成する必要があります。
                 </p>
+                {error && (
+                  <p className="mt-2 text-red-600">
+                    エラー: {error}
+                  </p>
+                )}
               </div>
               <div className="mt-4">
                 <button
@@ -89,6 +105,19 @@ function NotesList() {
     );
   }
 
+  // ローディングの表示（ダミー表示の時間制限を設ける）
+  if (loading) {
+    console.log("Rendering loading view");
+    return (
+      <div className="container mx-auto p-4">
+        <Loading />
+        <div className="mt-4 text-center text-gray-500">
+          {notes.length === 0 ? "ノートをロード中..." : "更新中..."}
+        </div>
+      </div>
+    );
+  }
+
   // Filter notes based on search term
   const filteredNotes = notes.filter(note => 
     note.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -106,10 +135,7 @@ function NotesList() {
     }
   });
 
-  if (loading && notes.length === 0) {
-    return <Loading />;
-  }
-
+  console.log("Rendering main notes view");
   return (
     <div className="container mx-auto p-4">
       {error && (

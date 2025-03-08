@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getNotes, createNote, updateNote, deleteNote } from '../services/api';
 import { useAuth } from './AuthContext';
-import { checkProfileExists, createProfile, generateKeyPair } from '../services/auth';
+import { checkProfileExists, createProfile } from '../services/auth';
+import { generateKeyPair } from '../services/crypto';
 
 const NotesContext = createContext();
 
@@ -17,9 +18,11 @@ export function NotesProvider({ children }) {
   const { user } = useAuth();
 
   useEffect(() => {
+    console.log("NotesProvider useEffect triggered, user:", user);
     if (user) {
       fetchNotes();
     } else {
+      console.log("No user, clearing notes state");
       setNotes([]);
       setLoading(false);
       setNoProfile(false);
@@ -27,55 +30,72 @@ export function NotesProvider({ children }) {
   }, [user]);
 
   async function fetchNotes() {
+    console.log("fetchNotes called");
     setLoading(true);
     setError(null);
     setNoProfile(false);
     
     try {
       // プロファイルの存在を確認
+      console.log("Checking if profile exists...");
       const profileExists = await checkProfileExists();
+      console.log("Profile exists:", profileExists);
       
       if (!profileExists) {
+        console.log("No profile found, setting noProfile to true");
         setNoProfile(true);
         setError('プロファイルが見つかりません。プロファイルを作成してください。');
         setLoading(false);
         return;
       }
       
+      console.log("Fetching notes...");
       const fetchedNotes = await getNotes();
+      console.log("Notes fetched:", fetchedNotes);
       setNotes(fetchedNotes);
     } catch (err) {
       console.error('Failed to fetch notes:', err);
       
       // プロファイルに関するエラーの特別処理
       if (err.message === "プロファイルが見つかりません") {
+        console.log("Profile not found error detected");
         setNoProfile(true);
         setError('プロファイルが見つかりません。プロファイルを作成してください。');
       } else {
-        setError('ノートの読み込みに失敗しました。再試行してください。');
+        setError('ノートの読み込みに失敗しました: ' + err.message);
       }
     } finally {
+      console.log("Setting loading to false");
       setLoading(false);
     }
   }
 
   async function setupProfile() {
+    console.log("setupProfile called");
     setLoading(true);
     try {
       // デバイスのキーペアを生成
+      console.log("Generating key pair...");
       const deviceKeyPair = await generateKeyPair();
       
       // プロファイルを作成
+      console.log("Creating profile...");
       await createProfile('Initial Device', deviceKeyPair);
       
       // プロファイル作成後にノートを再取得
+      console.log("Profile created successfully");
       setNoProfile(false);
-      await fetchNotes();
+      
+      // 少し待機して再取得（非同期処理の完了を待つ）
+      setTimeout(async () => {
+        console.log("Fetching notes after profile creation");
+        await fetchNotes();
+      }, 1000);
       
       return { success: true };
     } catch (err) {
       console.error('Failed to create profile:', err);
-      setError('プロファイルの作成に失敗しました。もう一度お試しください。');
+      setError('プロファイルの作成に失敗しました: ' + err.message);
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
@@ -83,15 +103,19 @@ export function NotesProvider({ children }) {
   }
 
   async function addNote(title, content) {
+    console.log("addNote called", { title });
     setLoading(true);
     setError(null);
     try {
       // プロファイルの存在確認
       if (noProfile) {
+        console.log("Cannot add note: no profile");
         return { success: false, error: 'プロファイルが見つかりません。プロファイルを作成してください。' };
       }
       
+      console.log("Creating note...");
       const noteId = await createNote(title, content);
+      console.log("Note created with ID:", noteId);
       
       // 新しいノートをローカル状態に追加
       const newNote = {
@@ -102,11 +126,11 @@ export function NotesProvider({ children }) {
         updated: new Date()
       };
       
-      setNotes([...notes, newNote]);
+      setNotes(prevNotes => [...prevNotes, newNote]);
       return { success: true, noteId };
     } catch (err) {
       console.error('Failed to add note:', err);
-      setError('ノートの追加に失敗しました。もう一度お試しください。');
+      setError('ノートの追加に失敗しました: ' + err.message);
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
@@ -114,6 +138,7 @@ export function NotesProvider({ children }) {
   }
 
   async function editNote(id, title, content) {
+    console.log("editNote called", { id, title });
     setLoading(true);
     setError(null);
     try {
@@ -130,7 +155,7 @@ export function NotesProvider({ children }) {
       return { success: true };
     } catch (err) {
       console.error(`Failed to update note ${id}:`, err);
-      setError('ノートの更新に失敗しました。もう一度お試しください。');
+      setError('ノートの更新に失敗しました: ' + err.message);
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
@@ -138,6 +163,7 @@ export function NotesProvider({ children }) {
   }
 
   async function removeNote(id) {
+    console.log("removeNote called", { id });
     setLoading(true);
     setError(null);
     try {
@@ -149,13 +175,14 @@ export function NotesProvider({ children }) {
       return { success: true };
     } catch (err) {
       console.error(`Failed to delete note ${id}:`, err);
-      setError('ノートの削除に失敗しました。もう一度お試しください。');
+      setError('ノートの削除に失敗しました: ' + err.message);
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
     }
   }
 
+  // コンテキスト値
   const value = {
     notes,
     loading,
