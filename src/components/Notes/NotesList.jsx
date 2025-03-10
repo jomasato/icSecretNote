@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNotes } from '../../context/NotesContext';
 import NoteItem from './NoteItem';
 import NoteEditor from './NoteEditor';
 import Loading from '../common/Loading';
+import { debounce } from 'lodash';
 
 function NotesList() {
   const { notes, loading, error, noProfile, refreshNotes, setupProfile } = useNotes();
@@ -11,12 +12,68 @@ function NotesList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOption, setSortOption] = useState('updated');
   const [creatingProfile, setCreatingProfile] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  
+  // デバウンスされたリフレッシュ関数
+  const debouncedRefresh = useMemo(
+    () => 
+      debounce(() => {
+        console.log("Debounced refresh called");
+        refreshNotes();
+      }, 300),
+    [refreshNotes]
+  );
+  
+  // 最適化されたリフレッシュ関数
+  const optimizedRefresh = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRefreshTime > 3000) { // 3秒以上経過していれば更新
+      setLastRefreshTime(now);
+      debouncedRefresh();
+    } else {
+      console.log("Skipping refresh, too soon");
+    }
+  }, [debouncedRefresh, lastRefreshTime]);
 
+  // コンポーネントマウント時のみデータ取得
   useEffect(() => {
-    console.log("NotesList useEffect called");
-    refreshNotes();
-  }, [refreshNotes]);
+    let isMounted = true;
+    
+    if (notes.length === 0 && !loading && !noProfile && isMounted) {
+      console.log("Initial data fetch");
+      optimizedRefresh();
+    }
+    
+    return () => {
+      isMounted = false;
+      debouncedRefresh.cancel(); // コンポーネントのアンマウント時にデバウンス関数をキャンセル
+    };
+  }, []);  // 依存配列を空にして初回のみ実行
 
+  // エラー後の自動再試行
+  useEffect(() => {
+    let retryTimeout;
+    
+    if (error && !noProfile && !isRetrying) {
+      setIsRetrying(true);
+      console.log("Scheduling auto-retry after error");
+      
+      retryTimeout = setTimeout(() => {
+        console.log("Auto-retrying after error");
+        refreshNotes();
+        setIsRetrying(false);
+      }, 5000); // 5秒後に再試行
+    }
+    
+    return () => {
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
+  }, [error, noProfile, refreshNotes]);
+
+  // 以下は省略 - 元のコードと同じ
   const handleAddNote = () => {
     setEditingNote(null);
     setIsEditorOpen(true);
@@ -47,6 +104,28 @@ function NotesList() {
       setCreatingProfile(false);
     }
   };
+
+  // メモ化されたフィルタリングと並べ替え
+  const filteredAndSortedNotes = useMemo(() => {
+    console.log("Recomputing filtered and sorted notes");
+    
+    // Filter notes based on search term
+    const filtered = notes.filter(note => 
+      note.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      note.content.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Sort notes based on sort option
+    return [...filtered].sort((a, b) => {
+      if (sortOption === 'title') {
+        return a.title.localeCompare(b.title);
+      } else if (sortOption === 'created') {
+        return new Date(b.created) - new Date(a.created);
+      } else {
+        return new Date(b.updated) - new Date(a.updated);
+      }
+    });
+  }, [notes, searchTerm, sortOption]);
 
   console.log("NotesList render", {
     loading,
@@ -139,8 +218,14 @@ function NotesList() {
   return (
     <div className="container mx-auto p-4">
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 flex justify-between items-center">
           <span className="block sm:inline">{error}</span>
+          <button 
+            onClick={optimizedRefresh} 
+            className="bg-red-200 hover:bg-red-300 text-red-800 font-bold py-1 px-2 rounded text-sm"
+          >
+            再試行
+          </button>
         </div>
       )}
 

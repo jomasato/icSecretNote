@@ -80,42 +80,94 @@ export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShar
  * すべてのノートを取得して復号
  * @returns {Array} 復号されたノートの配列
  */
-export const getNotes = async () => {
+
+
+// キャッシュつきgetNotes関数
+// キャッシュを保持するオブジェクト
+const cache = {
+  notes: {
+    data: null,
+    timestamp: null,
+    ttl: 30000 // 30秒間キャッシュを保持
+  }
+};
+
+// 進行中のリクエストを追跡
+const pendingRequests = {
+  getNotes: null
+};
+
+/**
+ * すべてのノートを取得して復号（キャッシュ付き）
+ * @param {boolean} forceRefresh - キャッシュを無視して強制的に再取得するか
+ * @returns {Promise<Array>} 復号されたノートの配列
+ */
+export const getNotes = async (forceRefresh = false) => {
+  // 既に進行中のリクエストがあれば、それを返す
+  if (pendingRequests.getNotes) {
+    return pendingRequests.getNotes;
+  }
+  
+  // キャッシュが有効な場合はキャッシュから返す
+  if (!forceRefresh && 
+      cache.notes.data && 
+      cache.notes.timestamp && 
+      Date.now() - cache.notes.timestamp < cache.notes.ttl) {
+    return cache.notes.data;
+  }
+  
   try {
-    const actor = await getActor();
-    const result = await actor.getNotes();
-    
-    // デバイスの秘密鍵を取得
-    const devicePrivateKey = localStorage.getItem('devicePrivateKey');
-    if (!devicePrivateKey) {
-      throw new Error('Device private key not found');
-    }
-    
-    // ノートを秘密鍵で復号
-    return result.map(note => {
-      try {
-        const title = decryptWithPrivateKey(note.title, devicePrivateKey);
-        const content = decryptWithPrivateKey(note.content, devicePrivateKey);
-        
-        return {
-          id: note.id,
-          title,
-          content,
-          created: new Date(Number(note.created) / 1000000),
-          updated: new Date(Number(note.updated) / 1000000)
-        };
-      } catch (error) {
-        console.error(`Failed to decrypt note ${note.id}:`, error);
-        return {
-          id: note.id,
-          title: 'Unable to decrypt',
-          content: 'Unable to decrypt this note',
-          created: new Date(Number(note.created) / 1000000),
-          updated: new Date(Number(note.updated) / 1000000)
-        };
+    // 新しいリクエストのPromiseを生成して保存
+    pendingRequests.getNotes = (async () => {
+      const actor = await getActor();
+      const result = await actor.getNotes();
+      
+      // デバイスの秘密鍵を取得
+      const devicePrivateKey = localStorage.getItem('devicePrivateKey');
+      if (!devicePrivateKey) {
+        throw new Error('Device private key not found');
       }
-    });
+      
+      // ノートを秘密鍵で復号
+      return result.map(note => {
+        try {
+          const title = decryptWithPrivateKey(note.title, devicePrivateKey);
+          const content = decryptWithPrivateKey(note.content, devicePrivateKey);
+          
+          return {
+            id: note.id,
+            title,
+            content,
+            created: new Date(Number(note.created) / 1000000),
+            updated: new Date(Number(note.updated) / 1000000)
+          };
+        } catch (error) {
+          console.error(`Failed to decrypt note ${note.id}:`, error);
+          return {
+            id: note.id,
+            title: 'Unable to decrypt',
+            content: 'Unable to decrypt this note',
+            created: new Date(Number(note.created) / 1000000),
+            updated: new Date(Number(note.updated) / 1000000)
+          };
+        }
+      });
+    })();
+    
+    // リクエスト完了を待つ
+    const result = await pendingRequests.getNotes;
+    
+    // リクエスト完了後、pendingRequestsをクリア
+    pendingRequests.getNotes = null;
+    
+    // キャッシュに保存
+    cache.notes.data = result;
+    cache.notes.timestamp = Date.now();
+    
+    return result;
   } catch (error) {
+    // エラー時にpendingRequestsをクリア
+    pendingRequests.getNotes = null;
     console.error('Failed to get notes:', error);
     throw error;
   }

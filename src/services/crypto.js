@@ -3,6 +3,9 @@
 import CryptoJS from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
 import md5 from 'blueimp-md5';
+import * as improvedCrypto from './improved-crypto';
+// 以下を追加
+const { createShares: shamirCreateShares, combineShares: shamirCombineShares } = require('./shamir');
 
 // secrets.js-grempeの代わりに使用する簡易実装
 // 注: これは本番環境での使用には適していません
@@ -186,17 +189,8 @@ export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
  */
 export const createShares = (secret, totalShares, threshold) => {
   try {
-    // 秘密情報をHEX形式に変換
-    const hexSecret = CryptoJS.enc.Hex.stringify(CryptoJS.enc.Utf8.parse(secret));
-    
-    // 簡易実装を使用してシェアを生成
-    const shares = simpleShamir.share(hexSecret, totalShares, threshold);
-    
-    // シェアにIDを付与して返す
-    return shares.map(share => ({
-      id: `share-${uuidv4()}`,
-      value: share
-    }));
+    // 新しいShamir実装を使用
+    return shamirCreateShares(secret, totalShares, threshold);
   } catch (error) {
     console.error('Failed to create shares:', error);
     return [];
@@ -210,14 +204,8 @@ export const createShares = (secret, totalShares, threshold) => {
  */
 export const combineShares = (shares) => {
   try {
-    // シェアの値だけを抽出
-    const shareValues = shares.map(share => share.value || share);
-    
-    // 簡易実装を使用してシェアを結合
-    const combined = simpleShamir.combine(shareValues);
-    
-    // HEXから文字列に変換
-    return CryptoJS.enc.Utf8.stringify(CryptoJS.enc.Hex.parse(combined));
+    // 新しいShamir実装を使用
+    return shamirCombineShares(shares);
   } catch (error) {
     console.error('Failed to combine shares:', error);
     return null;
@@ -463,13 +451,14 @@ export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShar
   // シェアを作成
   const shares = createShares(encryptionKey, totalGuardians, requiredShares);
   
-  // 公開リカバリーデータ
-  const publicRecoveryData = {
-    version: 1,
-    createdAt: new Date().toISOString(),
-    requiredShares,
-    totalShares: totalGuardians
-  };
+const publicRecoveryData = {
+  version: 2,  // バージョンを2に更新
+  createdAt: new Date().toISOString(),
+  requiredShares,
+  totalShares: totalGuardians,
+  algorithm: 'shamir-secret-sharing',
+  library: 'custom-implementation'
+};
   
   return {
     shares,
