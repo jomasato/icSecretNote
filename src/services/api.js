@@ -124,6 +124,14 @@ export const getNotes = async (forceRefresh = false) => {
       
       // デバイスの秘密鍵を取得
       const devicePrivateKey = localStorage.getItem('devicePrivateKey');
+      
+      // デバッグ情報を追加
+      console.log('デバイス秘密鍵:', {
+        exists: !!devicePrivateKey,
+        length: devicePrivateKey?.length,
+        preview: devicePrivateKey ? `${devicePrivateKey.substring(0, 10)}...` : 'なし'
+      });
+      
       if (!devicePrivateKey) {
         throw new Error('Device private key not found');
       }
@@ -131,6 +139,11 @@ export const getNotes = async (forceRefresh = false) => {
       // ノートを秘密鍵で復号
       return result.map(note => {
         try {
+          console.log(`ノート ${note.id} の復号を試行:`, {
+            titleLength: note.title?.length,
+            contentLength: note.content?.length
+          });
+          
           const title = decryptWithPrivateKey(note.title, devicePrivateKey);
           const content = decryptWithPrivateKey(note.content, devicePrivateKey);
           

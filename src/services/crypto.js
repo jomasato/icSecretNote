@@ -201,6 +201,8 @@ export const encryptWithPublicKey = (data, publicKey) => {
  * @param {string} privateKey - 秘密鍵
  * @returns {any} 復号されたデータ
  */
+
+/*
 export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
   try {
     // デバッグ情報
@@ -264,6 +266,7 @@ export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
     throw error;
   }
 };
+*/
 
 // ここからimproved-crypto.jsから置き換える関数 -----------------------
 
@@ -415,3 +418,246 @@ export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShar
   // improved-crypto.jsの実装を使用
   return improvedCrypto.generateRecoveryData(encryptionKey, totalGuardians, requiredShares);
 };
+
+// crypto.js の追加部分 - レガシーシステムとの互換性
+
+/**
+ * 秘密鍵でデータを復号（レガシー互換性を持つ拡張版）
+ * @param {Uint8Array} encryptedBlob - 暗号化されたデータ
+ * @param {string} privateKey - 秘密鍵
+ * @returns {any} 復号されたデータ
+ */
+export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
+  try {
+    // デバッグ情報
+    console.log('復号化開始:', {
+      encryptedBlobType: typeof encryptedBlob,
+      privateKeyType: typeof privateKey,
+      privateKeyLength: privateKey?.length,
+      isUint8Array: encryptedBlob instanceof Uint8Array
+    });
+
+    // ---- 形式検出と前処理 ----
+    let dataStr;
+    if (encryptedBlob instanceof Uint8Array) {
+      // 通常の変換プロセス
+      dataStr = blobToString(encryptedBlob);
+    } else if (typeof encryptedBlob === 'string') {
+      // すでに文字列の場合（レガシーケース）
+      dataStr = encryptedBlob;
+    } else if (encryptedBlob && typeof encryptedBlob === 'object') {
+      // オブジェクトの場合（別のレガシーケース）
+      try {
+        dataStr = JSON.stringify(encryptedBlob);
+      } catch (e) {
+        console.error('オブジェクトのJSON変換に失敗:', e);
+        dataStr = String(encryptedBlob);
+      }
+    } else {
+      // その他の不明な形式
+      console.error('未知の暗号化データ形式:', encryptedBlob);
+      dataStr = String(encryptedBlob);
+    }
+
+    console.log('処理用データ文字列:', { 
+      length: dataStr?.length, 
+      preview: dataStr?.substring(0, 30) + '...'
+    });
+
+    // ---- データ構造の検出と解析 ----
+    let encryptedData, encryptedKey;
+    
+    // 既知の形式をすべて試す
+    const dataParsed = tryParseJSON(dataStr);
+    
+    if (dataParsed && dataParsed.encryptedData && dataParsed.encryptedKey) {
+      // 標準形式 - JSON {encryptedData, encryptedKey}
+      console.log('標準JSON形式を検出');
+      encryptedData = dataParsed.encryptedData;
+      encryptedKey = dataParsed.encryptedKey;
+    } else {
+      // 他の形式を試す...
+      console.log('標準形式ではありません、代替形式を試行');
+      
+      // レガシー形式1: encryptedData部分がまた別のJSONかも
+      if (dataParsed && typeof dataParsed === 'string') {
+        console.log('潜在的な入れ子JSON文字列を検出');
+        const nestedParsed = tryParseJSON(dataParsed);
+        
+        if (nestedParsed && nestedParsed.encryptedData && nestedParsed.encryptedKey) {
+          console.log('入れ子JSON形式として処理');
+          encryptedData = nestedParsed.encryptedData;
+          encryptedKey = nestedParsed.encryptedKey;
+        }
+      }
+      
+      // それでも見つからない場合、直接暗号化テキストとして試行
+      if (!encryptedData || !encryptedKey) {
+        console.log('直接暗号化テキストとして試行');
+        
+        // 最後の手段: 直接暗号化文字列として扱う
+        try {
+          console.log('privateKeyを直接使用して復号を試行');
+          const result = decryptWithKey(dataStr, privateKey);
+          if (result) {
+            console.log('直接復号が成功');
+            return result;
+          }
+        } catch (directError) {
+          console.error('直接復号に失敗:', directError);
+        }
+        
+        throw new Error('有効な暗号化データ構造を認識できません');
+      }
+    }
+    
+    console.log('復号パラメータ:', { 
+      hasEncryptedData: !!encryptedData,
+      hasEncryptedKey: !!encryptedKey,
+      encryptedDataLength: encryptedData?.length,
+      encryptedKeyLength: encryptedKey?.length
+    });
+
+    // ---- キー復号プロセス ----
+    let decryptedKey;
+    try {
+      // まず秘密鍵がhexフォーマットなのか通常の文字列なのかを検出
+      const isHexKey = /^[0-9a-f]+$/i.test(privateKey) && privateKey.length >= 32;
+      console.log('秘密鍵フォーマット:', { isHex: isHexKey });
+      
+      // 標準の復号処理
+      decryptedKey = CryptoJS.AES.decrypt(encryptedKey, privateKey).toString(CryptoJS.enc.Utf8);
+      
+      if (!decryptedKey && isHexKey) {
+        // Hex形式の鍵で再試行
+        console.log('Hex形式の鍵で再試行');
+        const hexWords = CryptoJS.enc.Hex.parse(privateKey);
+        decryptedKey = CryptoJS.AES.decrypt(encryptedKey, hexWords).toString(CryptoJS.enc.Utf8);
+      }
+      
+      if (!decryptedKey) {
+        throw new Error('キーの復号に失敗しました');
+      }
+      
+      console.log('キー復号成功:', { 
+        keyLength: decryptedKey.length,
+        keyPreview: decryptedKey.substring(0, 5) + '...'
+      });
+    } catch (keyError) {
+      console.error('キー復号エラー:', keyError);
+      throw new Error(`キー復号に失敗: ${keyError.message}`);
+    }
+    
+    // ---- データ復号プロセス ----
+    try {
+      console.log('復号キーでデータ復号を試行');
+      const result = decryptWithKey(encryptedData, decryptedKey);
+      if (result) {
+        console.log('データ復号成功:', { 
+          resultType: typeof result,
+          preview: JSON.stringify(result).substring(0, 30) + '...'
+        });
+        return result;
+      } else {
+        throw new Error('データの復号結果が空です');
+      }
+    } catch (dataError) {
+      console.error('データ復号エラー:', dataError);
+      
+      // 別のフォーマットで再試行
+      console.log('代替形式でデータ復号を試行');
+      try {
+        const alternativeDecrypted = tryAlternativeDecryption(encryptedData, decryptedKey);
+        if (alternativeDecrypted) {
+          console.log('代替復号が成功');
+          return alternativeDecrypted;
+        }
+      } catch (altError) {
+        console.error('代替復号も失敗:', altError);
+      }
+      
+      throw new Error(`データ復号に失敗: ${dataError.message}`);
+    }
+  } catch (error) {
+    console.error('復号処理全体のエラー:', error);
+    throw error;
+  }
+};
+
+/**
+ * 安全にJSONをパースする
+ * @param {string} jsonString - パースする文字列
+ * @returns {any} パース結果またはnull
+ */
+function tryParseJSON(jsonString) {
+  try {
+    if (typeof jsonString !== 'string') return null;
+    return JSON.parse(jsonString);
+  } catch (e) {
+    console.log('JSON解析エラー:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 代替復号方法を試行
+ * @param {string} encryptedData - 暗号化データ
+ * @param {string} decryptedKey - 復号キー
+ * @returns {any} 復号結果または null
+ */
+function tryAlternativeDecryption(encryptedData, decryptedKey) {
+  // 1. Base64デコードを試す
+  try {
+    const wordArray = CryptoJS.enc.Base64.parse(encryptedData);
+    const decrypted = CryptoJS.AES.decrypt(
+      { ciphertext: wordArray },
+      CryptoJS.enc.Utf8.parse(decryptedKey)
+    );
+    const result = decrypted.toString(CryptoJS.enc.Utf8);
+    if (result) {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return result;
+      }
+    }
+  } catch (e) {
+    console.log('Base64変換復号の失敗:', e);
+  }
+  
+  // 2. Hex形式を試す
+  try {
+    const hexKey = CryptoJS.enc.Hex.parse(decryptedKey);
+    const decrypted = CryptoJS.AES.decrypt(encryptedData, hexKey);
+    const result = decrypted.toString(CryptoJS.enc.Utf8);
+    if (result) {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return result;
+      }
+    }
+  } catch (e) {
+    console.log('Hex形式での復号の失敗:', e);
+  }
+  
+  // 3. 直接復号を試す（不明形式）
+  try {
+    const decrypted = CryptoJS.AES.decrypt(
+      encryptedData.toString(),
+      decryptedKey.toString()
+    );
+    const result = decrypted.toString(CryptoJS.enc.Utf8);
+    if (result) {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return result;
+      }
+    }
+  } catch (e) {
+    console.log('直接文字列復号の失敗:', e);
+  }
+  
+  return null;
+}
