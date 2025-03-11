@@ -51,10 +51,44 @@ export const encryptWithKey = (data, key) => {
  */
 export const decryptWithKey = (encryptedData, key) => {
   try {
+    // デバッグログ追加
+    console.log('復号化試行:', { 
+      encryptedDataLength: encryptedData?.length, 
+      keyType: typeof key,
+      keyLength: key?.length 
+    });
+    
     const decrypted = CryptoJS.AES.decrypt(encryptedData, key);
-    return JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+    const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+    
+    if (!decryptedStr) {
+      console.error('復号結果が空です');
+      return null;
+    }
+    
+    console.log('復号化結果:', {
+      length: decryptedStr.length,
+      preview: decryptedStr.substring(0, 30) + '...'
+    });
+    
+    try {
+      return JSON.parse(decryptedStr);
+    } catch (parseError) {
+      console.error('JSON解析エラー:', parseError);
+      
+      // 厳密なJSON解析に失敗した場合、文字列として返す
+      if (decryptedStr) {
+        console.log('JSONではなく文字列として処理');
+        return decryptedStr;
+      }
+      return null;
+    }
   } catch (error) {
-    console.error('Decryption failed:', error);
+    console.error('復号化失敗:', error);
+    console.error('エラー時の詳細:', { 
+      encryptedDataSample: encryptedData?.substring(0, 20) + '...',
+      keyPreview: key ? (key.substring(0, 5) + '...') : 'undefined'
+    });
     return null;
   }
 };
@@ -76,12 +110,51 @@ export const stringToBlob = (str) => {
  * @returns {string} 変換された文字列
  */
 export const blobToString = (blob) => {
+  // ログ追加
+  console.log('blobToString called:', {
+    type: typeof blob,
+    isArray: Array.isArray(blob),
+    isUint8Array: blob instanceof Uint8Array,
+    length: blob?.length
+  });
+
+  // blobが文字列の場合はそのまま返す（後方互換性のため）
+  if (typeof blob === 'string') {
+    console.log('blobToString: 入力は既に文字列です');
+    return blob;
+  }
+  
+  // Uint8Array以外のオブジェクトの処理
   if (!blob || !(blob instanceof Uint8Array)) {
     console.error('Invalid blob passed to blobToString:', blob);
+    
+    // オブジェクトの場合はJSON文字列に変換（バグ防止）
+    if (blob && typeof blob === 'object') {
+      try {
+        return JSON.stringify(blob);
+      } catch (e) {
+        console.error('JSON変換エラー:', e);
+      }
+    }
+    
     return String(blob); // 例外的にString変換
   }
-  const decoder = new TextDecoder();
-  return decoder.decode(blob);
+  
+  try {
+    const decoder = new TextDecoder('utf-8', {fatal: false});
+    const result = decoder.decode(blob);
+    console.log('blobToString 変換結果:', {length: result.length});
+    return result;
+  } catch (e) {
+    console.error('TextDecoder変換エラー:', e);
+    
+    // フォールバック: 16進数文字列に変換して返す
+    const hexString = Array.from(blob)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    console.log('Uint8ArrayをHEX文字列に変換:', {length: hexString.length});
+    return hexString;
+  }
 };
 
 /**
@@ -130,16 +203,64 @@ export const encryptWithPublicKey = (data, publicKey) => {
  */
 export const decryptWithPrivateKey = (encryptedBlob, privateKey) => {
   try {
+    // デバッグ情報
+    console.log('復号化開始:', {
+      encryptedBlobType: typeof encryptedBlob,
+      privateKeyLength: privateKey?.length,
+      isUint8Array: encryptedBlob instanceof Uint8Array
+    });
+
     const dataStr = blobToString(encryptedBlob);
-    const { encryptedData, encryptedKey } = JSON.parse(dataStr);
+    console.log('Blobを文字列に変換:', { 
+      dataLength: dataStr?.length, 
+      dataPreview: dataStr?.substring(0, 50) 
+    });
+
+    // 復号処理の前に厳密なバリデーション
+    let encryptedData, encryptedKey;
+    try {
+      const parsed = JSON.parse(dataStr);
+      encryptedData = parsed.encryptedData;
+      encryptedKey = parsed.encryptedKey;
+      
+      if (!encryptedData || !encryptedKey) {
+        throw new Error('必要な暗号化データが見つかりません');
+      }
+    } catch (parseError) {
+      console.error('データ解析エラー:', parseError);
+      throw new Error(`データ形式が無効です: ${parseError.message}`);
+    }
+    
+    console.log('パース結果:', { 
+      hasEncryptedData: !!encryptedData,
+      hasEncryptedKey: !!encryptedKey,
+      encryptedKeyLength: encryptedKey?.length
+    });
     
     // 秘密鍵を使ってキーを復号
-    const decryptedKey = CryptoJS.AES.decrypt(encryptedKey, privateKey).toString(CryptoJS.enc.Utf8);
+    let decryptedKey;
+    try {
+      decryptedKey = CryptoJS.AES.decrypt(encryptedKey, privateKey).toString(CryptoJS.enc.Utf8);
+      if (!decryptedKey) {
+        throw new Error('キーの復号に失敗しました');
+      }
+      console.log('キー復号成功:', { keyLength: decryptedKey.length });
+    } catch (keyError) {
+      console.error('キー復号エラー:', keyError);
+      throw new Error(`キー復号に失敗: ${keyError.message}`);
+    }
     
     // 復号したキーでデータを復号
-    return decryptWithKey(encryptedData, decryptedKey);
+    try {
+      const result = decryptWithKey(encryptedData, decryptedKey);
+      console.log('データ復号成功:', { resultType: typeof result });
+      return result;
+    } catch (dataError) {
+      console.error('データ復号エラー:', dataError);
+      throw new Error(`データ復号に失敗: ${dataError.message}`);
+    }
   } catch (error) {
-    console.error('Failed to decrypt with private key:', error);
+    console.error('復号処理全体のエラー:', error);
     throw error;
   }
 };
