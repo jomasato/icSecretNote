@@ -143,10 +143,6 @@ export const getNotes = async (forceRefresh = false) => {
             titleLength: note.title?.length,
             contentLength: note.content?.length
           });
-          
-          const title = decryptWithPrivateKey(note.title, devicePrivateKey);
-          const content = decryptWithPrivateKey(note.content, devicePrivateKey);
-          // api.jsのgetNotes関数内
           console.log('Canisterから返されたノート:', {
             noteCount: result.length,
             sampleTitle: result[0]?.title ? {
@@ -157,7 +153,11 @@ export const getNotes = async (forceRefresh = false) => {
               isArrayBuffer: result[0].title instanceof ArrayBuffer,
               byteLength: result[0].title.byteLength
             } : 'なし'
-          });
+          });          
+          const title = decryptWithPrivateKey(note.title, devicePrivateKey);
+          const content = decryptWithPrivateKey(note.content, devicePrivateKey);
+          // api.jsのgetNotes関数内
+
           return {
             id: note.id,
             title,
