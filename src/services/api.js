@@ -9,7 +9,8 @@ import {
   encryptWithPublicKey, 
   decryptWithPrivateKey,
   createShares,
-  combineShares
+  combineShares,
+  generateKeyPair
 } from './crypto';
 
 //------------------------------------------------
@@ -122,42 +123,28 @@ export const getNotes = async (forceRefresh = false) => {
       const actor = await getActor();
       const result = await actor.getNotes();
       
-      // デバイスの秘密鍵を取得
-      const devicePrivateKey = localStorage.getItem('devicePrivateKey');
-      
-      // デバッグ情報を追加
-      console.log('デバイス秘密鍵:', {
-        exists: !!devicePrivateKey,
-        length: devicePrivateKey?.length,
-        preview: devicePrivateKey ? `${devicePrivateKey.substring(0, 10)}...` : 'なし'
-      });
-      
-      if (!devicePrivateKey) {
-        throw new Error('Device private key not found');
+      // マスターキーを取得
+      const masterKey = localStorage.getItem('masterEncryptionKey');
+      if (!masterKey) {
+        throw new Error('Master encryption key not found');
       }
       
-      // ノートを秘密鍵で復号
-      return result.map(note => {
+      // ノートを復号
+      return Promise.all(result.map(async note => {
         try {
-          console.log(`ノート ${note.id} の復号を試行:`, {
-            titleLength: note.title?.length,
-            contentLength: note.content?.length
-          });
-          console.log('Canisterから返されたノート:', {
-            noteCount: result.length,
-            sampleTitle: result[0]?.title ? {
-              type: typeof result[0].title,
-              constructor: result[0].title.constructor.name,
-              isArray: Array.isArray(result[0].title),
-              isUint8Array: result[0].title instanceof Uint8Array,
-              isArrayBuffer: result[0].title instanceof ArrayBuffer,
-              byteLength: result[0].title.byteLength
-            } : 'なし'
-          });          
-          const title = decryptWithPrivateKey(note.title, devicePrivateKey);
-          const content = decryptWithPrivateKey(note.content, devicePrivateKey);
-          // api.jsのgetNotes関数内
-
+          // Blobを文字列に変換
+          const titleStr = blobToString(note.title);
+          const contentStr = blobToString(note.content);
+          
+          // JSON形式に変換して解析 (improved-crypto.jsの形式に合わせる)
+          const titleObj = JSON.parse(titleStr);
+          const contentObj = JSON.parse(contentStr);
+          
+          // improved-crypto.jsの関数を使用
+          // これはWeb Crypto APIを使用するため非同期
+          const title = await decryptWithKey(titleObj, masterKey);
+          const content = await decryptWithKey(contentObj, masterKey);
+          
           return {
             id: note.id,
             title,
@@ -175,7 +162,7 @@ export const getNotes = async (forceRefresh = false) => {
             updated: new Date(Number(note.updated) / 1000000)
           };
         }
-      });
+      }));
     })();
     
     // リクエスト完了を待つ
@@ -246,30 +233,25 @@ export const createNote = async (title, content) => {
   try {
     const actor = await getActor();
     
-    // デバイスの秘密鍵を取得
-    const devicePrivateKey = localStorage.getItem('devicePrivateKey');
-    if (!devicePrivateKey) {
-      throw new Error('Device private key not found');
+    // マスターキーを取得
+    const masterKey = localStorage.getItem('masterEncryptionKey');
+    if (!masterKey) {
+      throw new Error('Master encryption key not found');
     }
     
-    // ユーザープロファイルからデバイスの公開鍵を取得
-    const profileResult = await actor.getProfile();
-    if (profileResult.err) {
-      throw new Error(profileResult.err);
-    }
+    // improved-crypto.jsの関数を使用して暗号化
+    const encryptedTitle = await encryptWithKey(title, masterKey);
+    const encryptedContent = await encryptWithKey(content, masterKey);
     
-    const profile = profileResult.ok;
-    const deviceInfo = profile.devices[0]; // 最初のデバイスを使用
-    
-    // ノートをデバイスの公開鍵で暗号化
-    const encryptedTitle = encryptWithPublicKey(title, deviceInfo.publicKey);
-    const encryptedContent = encryptWithPublicKey(content, deviceInfo.publicKey);
+    // 暗号化データをBlobに変換
+    const titleBlob = stringToBlob(JSON.stringify(encryptedTitle));
+    const contentBlob = stringToBlob(JSON.stringify(encryptedContent));
     
     // ノート用のユニークIDを生成
     const noteId = `note-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     
     // 暗号化されたノートを保存
-    const result = await actor.saveNote(noteId, encryptedTitle, encryptedContent);
+    const result = await actor.saveNote(noteId, titleBlob, contentBlob);
     
     if (result.err) {
       throw new Error(result.err);
@@ -293,27 +275,22 @@ export const updateNote = async (id, title, content) => {
   try {
     const actor = await getActor();
     
-    // デバイスの秘密鍵を取得
-    const devicePrivateKey = localStorage.getItem('devicePrivateKey');
-    if (!devicePrivateKey) {
-      throw new Error('Device private key not found');
+    // マスターキーを取得
+    const masterKey = localStorage.getItem('masterEncryptionKey');
+    if (!masterKey) {
+      throw new Error('Master encryption key not found');
     }
     
-    // ユーザープロファイルからデバイスの公開鍵を取得
-    const profileResult = await actor.getProfile();
-    if (profileResult.err) {
-      throw new Error(profileResult.err);
-    }
+    // improved-crypto.jsの関数を使用して暗号化
+    const encryptedTitle = await encryptWithKey(title, masterKey);
+    const encryptedContent = await encryptWithKey(content, masterKey);
     
-    const profile = profileResult.ok;
-    const deviceInfo = profile.devices[0]; // 最初のデバイスを使用
-    
-    // ノートをデバイスの公開鍵で暗号化
-    const encryptedTitle = encryptWithPublicKey(title, deviceInfo.publicKey);
-    const encryptedContent = encryptWithPublicKey(content, deviceInfo.publicKey);
+    // 暗号化データをBlobに変換
+    const titleBlob = stringToBlob(JSON.stringify(encryptedTitle));
+    const contentBlob = stringToBlob(JSON.stringify(encryptedContent));
     
     // 暗号化されたノートを更新
-    const result = await actor.updateNote(id, encryptedTitle, encryptedContent);
+    const result = await actor.updateNote(id, titleBlob, contentBlob);
     
     if (result.err) {
       throw new Error(result.err);
@@ -623,22 +600,42 @@ export const addDevice = async (deviceName) => {
     const actor = await getActor();
     
     // デバイス用の新しいキーペアを生成
-    const deviceKeyPair = {
-      privateKey: localStorage.getItem('devicePrivateKey'),
-      publicKey: stringToBlob('dummyPublicKey') // 実際のアプリでは適切な公開鍵を使用
-    };
+    const deviceKeyPair = await generateKeyPair(); // 非同期関数に注意
     
-    // 新しいデバイス用にマスターキーを暗号化
+    // マスターキーを取得
     const masterKey = localStorage.getItem('masterEncryptionKey');
-    const encryptedDeviceData = encryptWithPublicKey(masterKey, deviceKeyPair.publicKey);
+    if (!masterKey) {
+      throw new Error('Master encryption key not found');
+    }
     
-    const result = await actor.addDevice(deviceName, deviceKeyPair.publicKey, encryptedDeviceData);
+    // マスターキーを新デバイスの公開鍵で暗号化
+    const encryptedMasterKey = await encryptWithPublicKey(masterKey, deviceKeyPair.publicKey);
+    
+    // キャニスターにデバイスを追加
+    const result = await actor.addDevice(
+      deviceName, 
+      deviceKeyPair.publicKey, 
+      encryptedMasterKey
+    );
     
     if (result.err) {
       throw new Error(result.err);
     }
     
-    return result.ok;
+    // QRコードなどで新デバイスに秘密鍵を提供する情報を生成
+    const deviceSetupInfo = {
+      deviceId: result.ok,
+      privateKey: deviceKeyPair.privateKey,
+      expiresAt: Date.now() + 1000 * 60 * 10 // 10分有効
+    };
+    
+    // セットアップトークンを生成（QRコードに使用）
+    const setupToken = btoa(JSON.stringify(deviceSetupInfo));
+    
+    return {
+      deviceId: result.ok,
+      setupToken
+    };
   } catch (error) {
     console.error('Failed to add device:', error);
     throw error;
@@ -662,6 +659,44 @@ export const removeDevice = async (deviceId) => {
     return true;
   } catch (error) {
     console.error('Failed to remove device:', error);
+    throw error;
+  }
+};
+
+// 新デバイスでトークンを読み込む
+export const setupNewDevice = async (setupToken) => {
+  try {
+    const setupData = JSON.parse(atob(setupToken));
+    
+    // 有効期限チェック
+    if (Date.now() > setupData.expiresAt) {
+      throw new Error('セットアップトークンの有効期限が切れています');
+    }
+    
+    // デバイス秘密鍵を保存
+    localStorage.setItem('devicePrivateKey', setupData.privateKey);
+    
+    // マスターキーを取得
+    const actor = await getActor();
+    const accessKeyResult = await actor.getAccessKey();
+    
+    if (accessKeyResult.err) {
+      throw new Error(accessKeyResult.err);
+    }
+    
+    // 秘密鍵でマスターキーを復号
+    const encryptedMasterKey = accessKeyResult.ok;
+    const masterKey = await decryptWithPrivateKey(
+      encryptedMasterKey,
+      setupData.privateKey
+    );
+    
+    // マスターキーを保存
+    localStorage.setItem('masterEncryptionKey', masterKey);
+    
+    return true;
+  } catch (error) {
+    console.error('デバイスセットアップエラー:', error);
     throw error;
   }
 };

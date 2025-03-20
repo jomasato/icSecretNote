@@ -6,7 +6,8 @@ import { idlFactory as secureNotesIDL } from '../declarations/secure_notes.js';
 import { 
   generateKeyPair, 
   encryptWithPublicKey,
-  generateEncryptionKey
+  generateEncryptionKey,
+  decryptWithPrivateKey
 } from './crypto';
 
 // 定数
@@ -41,6 +42,41 @@ export const initAuth = async () => {
 export const isAuthenticated = async () => {
   const client = await initAuth();
   return await client.isAuthenticated();
+};
+
+// auth.js に追加する関数
+export const initializeNewDevice = async (devicePrivateKey) => {
+  try {
+    const actor = await getActor();
+    
+    // デバイス情報を取得
+    const profileResult = await actor.getProfile();
+    if (profileResult.err) {
+      throw new Error(profileResult.err);
+    }
+    
+    // 暗号化されたマスターキーを取得（この部分の実装がキャニスター側の詳細による）
+    // 最初のデバイス情報からencryptedDeviceDataを取得するか、または
+    // getAccessKey などの専用関数がある場合はそれを使用
+    const accessKeyResult = await actor.getAccessKey();
+    if (accessKeyResult.err) {
+      throw new Error(accessKeyResult.err);
+    }
+    
+    // 秘密鍵で復号
+    const masterKey = decryptWithPrivateKey(
+      accessKeyResult.ok,
+      devicePrivateKey
+    );
+    
+    // マスターキーをローカルに保存
+    localStorage.setItem('masterEncryptionKey', masterKey);
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize device:', error);
+    throw error;
+  }
 };
 
 /**

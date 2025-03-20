@@ -106,26 +106,35 @@ function NotesList() {
   };
 
   // メモ化されたフィルタリングと並べ替え
-  const filteredAndSortedNotes = useMemo(() => {
-    console.log("Recomputing filtered and sorted notes");
-    
-    // Filter notes based on search term
-    const filtered = notes.filter(note => 
-      note.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      note.content.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+// filteredAndSortedNotes の useMemo 内のコードを修正
 
-    // Sort notes based on sort option
-    return [...filtered].sort((a, b) => {
-      if (sortOption === 'title') {
-        return a.title.localeCompare(b.title);
-      } else if (sortOption === 'created') {
-        return new Date(b.created) - new Date(a.created);
-      } else {
-        return new Date(b.updated) - new Date(a.updated);
-      }
-    });
-  }, [notes, searchTerm, sortOption]);
+const filteredAndSortedNotes = useMemo(() => {
+  console.log("Recomputing filtered and sorted notes");
+  
+  // Filter notes based on search term
+  const filtered = notes.filter(note => {
+    // null や undefined のプロパティに対する保護を追加
+    const title = note?.title || '';
+    const content = note?.content || '';
+    
+    return title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+           content.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  // Sort notes based on sort option
+  return [...filtered].sort((a, b) => {
+    if (sortOption === 'title') {
+      // ここも null 対策
+      const titleA = a?.title || '';
+      const titleB = b?.title || '';
+      return titleA.localeCompare(titleB);
+    } else if (sortOption === 'created') {
+      return new Date(b.created || 0) - new Date(a.created || 0);
+    } else {
+      return new Date(b.updated || 0) - new Date(a.updated || 0);
+    }
+  });
+}, [notes, searchTerm, sortOption]);
 
   console.log("NotesList render", {
     loading,
@@ -197,22 +206,28 @@ function NotesList() {
     );
   }
 
-  // Filter notes based on search term
-  const filteredNotes = notes.filter(note => 
-    note.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    note.content.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+// Filter notes based on search term
+const filteredNotes = notes.filter(note => {
+  // null や undefined のプロパティに対する保護を追加
+  const title = note?.title || '';
+  const content = note?.content || '';
+  
+  return title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+         content.toLowerCase().includes(searchTerm.toLowerCase());
+});
 
-  // Sort notes based on sort option
-  const sortedNotes = [...filteredNotes].sort((a, b) => {
-    if (sortOption === 'title') {
-      return a.title.localeCompare(b.title);
-    } else if (sortOption === 'created') {
-      return new Date(b.created) - new Date(a.created);
-    } else {
-      return new Date(b.updated) - new Date(a.updated);
-    }
-  });
+// Sort notes based on sort option
+const sortedNotes = [...filteredNotes].sort((a, b) => {
+  if (sortOption === 'title') {
+    const titleA = a?.title || '';
+    const titleB = b?.title || '';
+    return titleA.localeCompare(titleB);
+  } else if (sortOption === 'created') {
+    return new Date(b.created || 0) - new Date(a.created || 0);
+  } else {
+    return new Date(b.updated || 0) - new Date(a.updated || 0);
+  }
+});
 
   console.log("Rendering main notes view");
   return (
