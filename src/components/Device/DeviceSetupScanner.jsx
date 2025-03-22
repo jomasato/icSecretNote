@@ -208,7 +208,7 @@ function DeviceSetupScanner() {
               <form onSubmit={handleSubmit} className="mb-6">
                 <div className="mb-4">
                   <label htmlFor="setupToken" className="block text-gray-700 text-sm font-bold mb-2">
-                    セットアップコード
+                  QRコードが読み取れない場合は、セットアップコードを貼り付けてください。
                   </label>
                   <textarea
                     id="setupToken"

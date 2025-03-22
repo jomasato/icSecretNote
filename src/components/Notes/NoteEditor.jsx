@@ -88,7 +88,7 @@ function NoteEditor({ note, onClose }) {
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="bg-gray-50 border border-gray-300 text-gray-900 shadow appearance-none rounded w-full py-2 px-3 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             placeholder="ノートのタイトル"
             required
           />
@@ -102,7 +102,7 @@ function NoteEditor({ note, onClose }) {
             id="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-60"
+            className="bg-gray-50 border border-gray-300 text-gray-900 shadow appearance-none rounded w-full py-2 px-3 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 h-60"
             placeholder="ノートの内容を入力..."
             required
           />
@@ -119,7 +119,7 @@ function NoteEditor({ note, onClose }) {
           <button
             type="submit"
             disabled={loading}
-            className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-primary-400 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center">

@@ -4,9 +4,10 @@ import NoteItem from './NoteItem';
 import NoteEditor from './NoteEditor';
 import Loading from '../common/Loading';
 import { debounce } from 'lodash';
+import DeviceSetupScanner from '../Device/DeviceSetupScanner';
 
 function NotesList() {
-  const { notes, loading, error, noProfile, refreshNotes, setupProfile } = useNotes();
+  const { notes, loading, error, noProfile, refreshNotes, setupProfile, needDeviceSetup  } = useNotes();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +15,7 @@ function NotesList() {
   const [creatingProfile, setCreatingProfile] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showDeviceSetup, setShowDeviceSetup] = useState(false);
   
   // デバウンスされたリフレッシュ関数
   const debouncedRefresh = useMemo(
@@ -50,6 +52,13 @@ function NotesList() {
       debouncedRefresh.cancel(); // コンポーネントのアンマウント時にデバウンス関数をキャンセル
     };
   }, []);  // 依存配列を空にして初回のみ実行
+
+  // needDeviceSetup が true の場合、ポップアップを表示
+useEffect(() => {
+    if (needDeviceSetup) {
+      setShowDeviceSetup(true);
+    }
+  }, [needDeviceSetup]);
 
   // エラー後の自動再試行
   useEffect(() => {
@@ -291,6 +300,25 @@ const sortedNotes = [...filteredNotes].sort((a, b) => {
           </div>
         </div>
       )}
+
+        {showDeviceSetup && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="w-full max-w-md bg-white rounded-lg shadow-xl">
+              <div className="p-6">
+                <h2 className="text-xl font-bold mb-4">デバイスセットアップが必要です</h2>
+                <p className="mb-4 text-gray-600">
+                  このデバイスはまだセットアップされていません。既存のデバイスからQRコードをスキャンするか、
+                  セットアップコードを入力してください。
+                </p>
+                
+                <DeviceSetupScanner 
+                  onSetupComplete={() => setShowDeviceSetup(false)}
+                  embedded={true} 
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
       {sortedNotes.length === 0 ? (
         <div className="text-center py-12">

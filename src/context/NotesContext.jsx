@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { checkProfileExists, createProfile } from '../services/auth';
 import { generateKeyPair } from '../services/crypto';
 
+
 const NotesContext = createContext();
 
 export function useNotes() {
@@ -16,6 +17,8 @@ export function NotesProvider({ children }) {
   const [error, setError] = useState(null);
   const [noProfile, setNoProfile] = useState(false);
   const { user } = useAuth();
+  const [needDeviceSetup, setNeedDeviceSetup] = useState(false);
+
 
   useEffect(() => {
     console.log("NotesProvider useEffect triggered, user:", user);
@@ -51,6 +54,15 @@ export function NotesProvider({ children }) {
       
       console.log("Fetching notes...");
       const fetchedNotes = await getNotes();
+    // 復号失敗の検出（ノートがあるのに内容が空/復号エラーの場合）
+    if (fetchedNotes.length > 0 && fetchedNotes.every(note => 
+      note.title === 'Unable to decrypt' || 
+      note.content === 'Unable to decrypt this note')) {
+    // 復号鍵が不足していると判断
+    setNeedDeviceSetup(true);
+  }else {
+    setNeedDeviceSetup(false);
+  }
       console.log("Notes fetched:", fetchedNotes);
       setNotes(fetchedNotes);
     } catch (err) {
@@ -188,6 +200,7 @@ export function NotesProvider({ children }) {
     loading,
     error,
     noProfile,
+    needDeviceSetup,
     refreshNotes: fetchNotes,
     setupProfile,
     addNote,
