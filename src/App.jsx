@@ -10,6 +10,9 @@ import RecoveryProcess from './pages/RecoveryProcess';
 import RecoveryApproval from './pages/RecoveryApproval';
 import Devices from './pages/Devices';
 import './styles.css';
+import GuardianInvitePage from './pages/GuardianInvitePage';
+import DeviceSetupPage from './pages/DeviceSetupPage';
+import DeviceSetupScanner from './components/Device/DeviceSetupScanner';
 
 function App() {
   return (
@@ -33,8 +36,11 @@ function App() {
             <Route path="approve-recovery" element={<RecoveryApproval />} />
             <Route path="devices" element={<Devices />} />
           </Route>
-          
+          <Route path="/guardian-invite" element={<GuardianInvitePage />} />
+          <Route path="/setup-device" element={<DeviceSetupPage />} />
+          <Route path="/link-device" element={<ProtectedRoute> <DeviceSetupScanner /> </ProtectedRoute>}/>
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="GuardianInvitePage" element={<GuardianInvitePage />} />
         </Routes>
       </Router>
     </AuthProvider>

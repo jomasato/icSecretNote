@@ -3,12 +3,14 @@ import { getDevices, removeDevice } from '../../services/api';
 import { getActor } from '../../services/auth';
 import Loading from '../common/Loading';
 import AddDevice from './AddDevice';
+import DeviceQRSetup from './DeviceQRSetup.jsx';
 
 function DevicesList() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddDevice, setShowAddDevice] = useState(false);
+  const [showQRSetup, setShowQRSetup] = useState(false);
   const [noProfile, setNoProfile] = useState(false);  // プロファイルが存在しないかどうか
 
   useEffect(() => {
@@ -93,11 +95,23 @@ function DevicesList() {
 
   const handleAddDevice = () => {
     setShowAddDevice(true);
+    setShowQRSetup(false);
+  };
+
+  const handleShowQRSetup = () => {
+    setShowQRSetup(true);
+    setShowAddDevice(false);
   };
 
   const handleCloseAddDevice = () => {
     setShowAddDevice(false);
     // デバイス追加後にリストを更新
+    fetchDevices();
+  };
+
+  const handleCloseQRSetup = () => {
+    setShowQRSetup(false);
+    // QRセットアップ後にリストを更新
     fetchDevices();
   };
 
@@ -126,16 +140,26 @@ function DevicesList() {
 
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">マイデバイス</h1>
-        <button
-          onClick={handleAddDevice}
-          className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out flex items-center"
-          disabled={noProfile}
-        >
-          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          デバイスを追加
-        </button>
+        <div className="space-x-2">
+                <button
+                  onClick={handleShowQRSetup}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  QRコードで追加
+                </button>
+                <button
+                  onClick={handleAddDevice}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  手動で追加
+                </button>
+        </div>
       </div>
 
       {/* プロファイルが存在しない場合の表示 */}
@@ -202,15 +226,24 @@ function DevicesList() {
               <p className="mt-1 text-gray-500">
                 通常、少なくとも1つのデバイスが必要です。
               </p>
-              <div className="mt-6">
+              <div className="mt-6 flex justify-center space-x-4">
+                <button
+                  onClick={handleShowQRSetup}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  QRコードで追加
+                </button>
                 <button
                   onClick={handleAddDevice}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
-                  デバイスを追加
+                  手動で追加
                 </button>
               </div>
             </div>
@@ -281,6 +314,14 @@ function DevicesList() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md">
             <AddDevice onClose={handleCloseAddDevice} />
+          </div>
+        </div>
+      )}
+
+      {showQRSetup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md">
+            <DeviceQRSetup onClose={handleCloseQRSetup} />
           </div>
         </div>
       )}

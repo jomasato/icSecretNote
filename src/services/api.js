@@ -1,6 +1,6 @@
 //src/services/api.js
 
-import { getActor } from './auth';
+import { getActor,getCurrentPrincipal} from './auth';
 import { 
   stringToBlob, 
   blobToString, 
@@ -12,6 +12,7 @@ import {
   combineShares,
   generateKeyPair
 } from './crypto';
+
 
 //------------------------------------------------
 // ガーディアンの公開鍵管理
@@ -663,7 +664,8 @@ export const removeDevice = async (deviceId) => {
   }
 };
 
-// 新デバイスでトークンを読み込む
+
+
 export const setupNewDevice = async (setupToken) => {
   try {
     const setupData = JSON.parse(atob(setupToken));
@@ -676,7 +678,7 @@ export const setupNewDevice = async (setupToken) => {
     // デバイス秘密鍵を保存
     localStorage.setItem('devicePrivateKey', setupData.privateKey);
     
-    // マスターキーを取得
+    // マスターキーを取得 - FIX: Use actor's getAccessKey method instead of importing it
     const actor = await getActor();
     const accessKeyResult = await actor.getAccessKey();
     
@@ -791,6 +793,258 @@ export const collectRecoveryData = async (userPrincipal) => {
     };
   } catch (error) {
     console.error('Failed to collect recovery data:', error);
+    throw error;
+  }
+};
+
+
+/**
+ * ガーディアン招待トークンを生成
+ * @param {string} userPrincipal - ユーザーのプリンシパルID
+ * @returns {Promise<Object>} 生成された招待トークンと有効期限
+ */
+export const generateInvitationToken = async (userPrincipal) => {
+  try {
+    // この実装はモックバージョンです。実際のアプリでは、バックエンドでトークンを生成します。
+    // ここでは、フロントエンドでのトークン生成をシミュレートします。
+    const token = btoa(JSON.stringify({
+      inviterPrincipal: userPrincipal,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 3600000, // 1時間有効
+      id: `invite-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    }));
+    
+    return {
+      token,
+      expiresIn: 3600, // 1時間（秒単位）
+      createdAt: Date.now()
+    };
+  } catch (err) {
+    console.error('Failed to generate invitation token:', err);
+    throw new Error('招待トークンの生成に失敗しました');
+  }
+};
+
+/**
+ * 招待トークンを検証
+ * @param {string} token - 検証するトークン
+ * @param {string} principalId - ユーザーのプリンシパルID
+ * @returns {Promise<Object>} 検証結果
+ */
+export const verifyInvitationToken = async (token, principalId) => {
+  try {
+    // トークンのデコード
+    const decoded = JSON.parse(atob(token));
+    
+    // 有効期限の確認
+    if (decoded.expiresAt < Date.now()) {
+      return {
+        valid: false,
+        error: '招待トークンの有効期限が切れています'
+      };
+    }
+    
+    // プリンシパルIDの確認
+    if (decoded.inviterPrincipal !== principalId) {
+      return {
+        valid: false,
+        error: '招待トークンが無効です（プリンシパルIDが一致しません）'
+      };
+    }
+    
+    // 有効な場合、トークン情報を返す
+    return {
+      valid: true,
+      inviterPrincipal: decoded.inviterPrincipal,
+      createdAt: decoded.createdAt,
+      expiresAt: decoded.expiresAt,
+      id: decoded.id
+    };
+  } catch (err) {
+    console.error('Failed to verify invitation token:', err);
+    return {
+      valid: false,
+      error: '招待トークンの検証に失敗しました'
+    };
+  }
+};
+
+/**
+ * ガーディアン招待を受け入れる
+ * @param {string} token - 招待トークン
+ * @param {string} inviterPrincipal - 招待者のプリンシパルID
+ * @returns {Promise<Object>} 処理結果
+ */
+export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
+  try {
+    // トークンの検証
+    const verification = await verifyInvitationToken(token, inviterPrincipal);
+    if (!verification.valid) {
+      throw new Error(verification.error);
+    }
+    
+    // ここでバックエンドAPIを呼び出して、ガーディアンとして登録する処理を行います
+    // このモック実装では、成功を返します
+    
+    return {
+      success: true
+    };
+  } catch (err) {
+    console.error('Failed to accept guardian invitation:', err);
+    return {
+      success: false,
+      error: err.message || '招待の受け入れに失敗しました'
+    };
+  }
+};
+
+/**
+ * 保留中のリカバリーリクエストを取得
+ * @returns {Promise<Array>} リカバリーリクエストの配列
+ */
+export const getPendingRecoveryRequests = async () => {
+  try {
+    // この実装はモックバージョンです。実際のアプリでは、バックエンドからデータを取得します。
+    // ガーディアンとしての保留中のリクエストを取得する
+    
+    // モックデータの作成 (開発用)
+    const mockRequests = [
+      {
+        id: `request-${Date.now()}-1`,
+        principal: 'w3gef-eqllq-abcde-12345-xyz',
+        userName: 'ユーザー1',
+        requestTime: Date.now() - 3600000, // 1時間前
+        deviceLost: true,
+        shareId: 'share-123'
+      },
+      {
+        id: `request-${Date.now()}-2`,
+        principal: 'a2b3c-dq4rs-vw7yz-98765-abc',
+        userName: 'ユーザー2',
+        requestTime: Date.now() - 7200000, // 2時間前
+        deviceLost: false,
+        shareId: 'share-456'
+      }
+    ];
+    
+    return mockRequests;
+  } catch (err) {
+    console.error('Failed to get pending recovery requests:', err);
+    throw new Error('リカバリーリクエストの取得に失敗しました');
+  }
+};
+
+/**
+ * リカバリーの最終処理を実行
+ * @param {string} userPrincipal - ユーザーのプリンシパルID
+ * @param {string} tempAccessPrincipal - 一時アクセスプリンシパル
+ * @param {Uint8Array} publicKey - 新しいデバイスの公開鍵
+ * @returns {Promise<Object>} 処理結果
+ */
+export const finalizeRecovery = async (userPrincipal, tempAccessPrincipal, publicKey) => {
+  try {
+    // 実際のキャニスターAPIでは、複数のステップを実行します：
+    // 1. リカバリーセッションを検証
+    // 2. マスターキーを復元
+    // 3. 新しいデバイスに暗号化したマスターキーを提供
+    
+    // このモック実装では、成功を返します
+    return {
+      success: true
+    };
+  } catch (err) {
+    console.error('Failed to finalize recovery:', err);
+    return {
+      success: false,
+      error: err.message || 'リカバリーの最終処理に失敗しました'
+    };
+  }
+};
+
+
+export const setupDeviceLink = async () => {
+  try {
+    // 1. 新デバイス用のキーペアをフロントエンドで生成
+    const newDeviceKeyPair = await generateKeyPair();
+    
+    // 2. マスターキーを取得
+    const masterKey = localStorage.getItem('masterEncryptionKey');
+    if (!masterKey) {
+      throw new Error('マスターキーが見つかりません');
+    }
+    
+    // 3. マスターキーを新デバイスの公開鍵で暗号化
+    const encryptedMasterKey = await encryptWithPublicKey(masterKey, newDeviceKeyPair.publicKey);
+    
+    // 4. 既存の addDevice API を呼び出して新デバイスを登録
+    const deviceName = "新しいデバイス (QR連携)";
+    const result = await addDevice(deviceName, newDeviceKeyPair.publicKey, encryptedMasterKey);
+    
+    if (result.err) {
+      throw new Error(result.err || "デバイス追加に失敗しました");
+    }
+    
+    // 5. 連携データを作成
+    const linkData = {
+      deviceId: result.ok,
+      privateKey: newDeviceKeyPair.privateKey,
+      userPrincipal: await getCurrentPrincipal(),
+      expiresAt: Date.now() + 10 * 60 * 1000    // 10分間有効
+    };
+    
+    // 6. JSON化してBase64エンコード
+    const linkToken = btoa(JSON.stringify(linkData));
+    
+    return { 
+      token: linkToken,
+      deviceId: result.ok
+    };
+  } catch (error) {
+    console.error("デバイス連携準備エラー:", error);
+    throw error;
+  }
+};
+
+/**
+ * QRコードスキャン結果を処理して新デバイスを設定
+ * @param {string} scanResult - QRコードスキャン結果（Base64エンコードされたJSON）
+ * @returns {Promise<boolean>} 処理が成功したかどうか
+ */
+export const processDeviceLinkResult = async (scanResult) => {
+  try {
+    // 1. QRコードからデータを抽出
+    const linkData = JSON.parse(atob(scanResult));
+    
+    // 2. 有効期限をチェック
+    if (Date.now() > linkData.expiresAt) {
+      throw new Error("QRコードの有効期限が切れています");
+    }
+    
+    // 3. デバイス情報をローカルに保存
+    localStorage.setItem('deviceId', linkData.deviceId);
+    localStorage.setItem('devicePrivateKey', linkData.privateKey);
+    
+    // 4. マスターキーを取得
+    const actor = await getActor();
+    const accessKeyResult = await actor.getAccessKey();
+    
+    if (accessKeyResult.err) {
+      throw new Error(accessKeyResult.err || "アクセスキーの取得に失敗しました");
+    }
+    
+    // 5. 秘密鍵を使用してマスターキーを復号
+    const encryptedMasterKey = accessKeyResult.ok;
+    const masterKey = await decryptWithPrivateKey(
+      encryptedMasterKey,
+      linkData.privateKey
+    );
+    
+    // 6. マスターキーをローカルに保存
+    localStorage.setItem('masterEncryptionKey', masterKey);
+    
+    return true; // 連携成功
+  } catch (error) {
+    console.error("QRコード処理エラー:", error);
     throw error;
   }
 };
