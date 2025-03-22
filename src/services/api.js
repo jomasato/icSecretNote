@@ -127,11 +127,15 @@ export const getNotes = async (forceRefresh = false) => {
       // マスターキーを取得
       const masterKey = localStorage.getItem('masterEncryptionKey');
       if (!masterKey) {
-        throw new Error('Master encryption key not found');
+        const error = new Error('Master encryption key not found');
+        error.code = 'NO_MASTER_KEY';
+        throw error;
       }
+      // 復号エラーカウンター
+      let decryptionErrorCount = 0;
       
       // ノートを復号
-      return Promise.all(result.map(async note => {
+      const decryptedNotes = await Promise.all(result.map(async note => {
         try {
           // Blobを文字列に変換
           const titleStr = blobToString(note.title);
@@ -146,6 +150,12 @@ export const getNotes = async (forceRefresh = false) => {
           const title = await decryptWithKey(titleObj, masterKey);
           const content = await decryptWithKey(contentObj, masterKey);
           
+          // 復号失敗チェック
+          if (!title || !content) {
+            decryptionErrorCount++;
+            throw new Error('Decryption failed for note ' + note.id);
+          }
+          
           return {
             id: note.id,
             title,
@@ -154,16 +164,46 @@ export const getNotes = async (forceRefresh = false) => {
             updated: new Date(Number(note.updated) / 1000000)
           };
         } catch (error) {
+          // エラーをカウント
+          decryptionErrorCount++;
+          
           console.error(`Failed to decrypt note ${note.id}:`, error);
           return {
             id: note.id,
             title: 'Unable to decrypt',
             content: 'Unable to decrypt this note',
             created: new Date(Number(note.created) / 1000000),
-            updated: new Date(Number(note.updated) / 1000000)
+            updated: new Date(Number(note.updated) / 1000000),
+            _decryptionFailed: true // 復号失敗フラグ
           };
         }
       }));
+      
+      // 復号エラーが一定数を超えた場合、カスタムイベントを発火
+      if (decryptionErrorCount > 0) {
+        const errorRate = decryptionErrorCount / result.length;
+        console.warn(`Decryption errors: ${decryptionErrorCount}/${result.length} (${(errorRate * 100).toFixed(1)}%)`);
+        
+        // グローバル状態に記録
+        if (window._cryptoState) {
+          window._cryptoState.decryptionErrors += decryptionErrorCount;
+          window._cryptoState.decryptionAttempts += result.length;
+          // カスタムイベントを手動で発火
+          if (errorRate >= 0.3) { // 30%以上のエラー率でイベント発火
+            const event = new CustomEvent('decryption-error', {
+              detail: {
+                errorRate,
+                attempts: result.length,
+                errors: decryptionErrorCount,
+                lastError: new Error('Multiple notes failed to decrypt')
+              }
+            });
+            window.dispatchEvent(event);
+          }
+        }
+      }
+      
+      return decryptedNotes;
     })();
     
     // リクエスト完了を待つ
@@ -181,6 +221,23 @@ export const getNotes = async (forceRefresh = false) => {
     // エラー時にpendingRequestsをクリア
     pendingRequests.getNotes = null;
     console.error('Failed to get notes:', error);
+    // 特別なエラーコードの処理
+    if (error.code === 'NO_MASTER_KEY') {
+      // マスターキーが見つからない場合の処理
+      if (window._cryptoState) {
+        // 復号エラーイベントを発火
+        const event = new CustomEvent('decryption-error', {
+          detail: {
+            errorRate: 1, // 100% エラー
+            attempts: 1,
+            errors: 1,
+            lastError: error
+          }
+        });
+        window.dispatchEvent(event);
+      }
+    }
+    
     throw error;
   }
 };

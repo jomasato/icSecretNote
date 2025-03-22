@@ -30,6 +30,7 @@ export const generateEncryptionKey = () => {
   return CryptoJS.lib.WordArray.random(32).toString();
 };
 
+
 /**
  * データをキーで暗号化
  * @param {any} data - 暗号化するデータ
@@ -51,6 +52,10 @@ export const encryptWithKey = (data, key) => {
  */
 export const decryptWithKey = (encryptedData, key) => {
   try {
+    // 復号試行をカウント
+    if (window._cryptoState) {
+      window._cryptoState.decryptionAttempts++;
+    }
     // デバッグログ追加
     console.log('復号化試行:', { 
       encryptedDataLength: encryptedData?.length, 
@@ -63,6 +68,15 @@ export const decryptWithKey = (encryptedData, key) => {
     
     if (!decryptedStr) {
       console.error('復号結果が空です');
+
+     // 復号エラーとしてカウント
+     if (window._cryptoState) {
+        window._cryptoState.decryptionErrors++;
+        window._cryptoState.lastError = new Error('Empty decryption result');
+              
+              // エラーイベントを発火
+        fireDecryptionErrorEvent();
+     }
       return null;
     }
     
@@ -75,6 +89,15 @@ export const decryptWithKey = (encryptedData, key) => {
       return JSON.parse(decryptedStr);
     } catch (parseError) {
       console.error('JSON解析エラー:', parseError);
+
+      // JSON解析エラーもカウント
+      if (window._cryptoState) {
+        window._cryptoState.decryptionErrors++;
+        window._cryptoState.lastError = parseError;
+              
+        // エラーイベントを発火
+        fireDecryptionErrorEvent();
+            }
       
       // 厳密なJSON解析に失敗した場合、文字列として返す
       if (decryptedStr) {
@@ -89,9 +112,87 @@ export const decryptWithKey = (encryptedData, key) => {
       encryptedDataSample: encryptedData?.substring(0, 20) + '...',
       keyPreview: key ? (key.substring(0, 5) + '...') : 'undefined'
     });
+
+    // 復号エラーとしてカウント
+    if (window._cryptoState) {
+      window._cryptoState.decryptionErrors++;
+      window._cryptoState.lastError = error;
+          
+      // エラーイベントを発火
+      fireDecryptionErrorEvent();
+    }
     return null;
   }
 };
+
+// 復号エラーイベントを発火する関数
+function fireDecryptionErrorEvent() {
+  // エラー率を計算
+  if (!window._cryptoState || window._cryptoState.decryptionAttempts === 0) {
+    return;
+  }
+  
+  const errorRate = window._cryptoState.decryptionErrors / window._cryptoState.decryptionAttempts;
+  console.log(`Decryption error rate: ${errorRate.toFixed(2)} (${window._cryptoState.decryptionErrors}/${window._cryptoState.decryptionAttempts})`);
+  
+  // エラー率がしきい値を超えた場合、カスタムイベントを発火
+  if (errorRate >= window._cryptoState.errorThreshold) {
+    console.warn(`High decryption error rate detected: ${(errorRate * 100).toFixed(0)}%`);
+    
+    // カスタムイベントを作成して発火
+    const event = new CustomEvent('decryption-error', {
+      detail: {
+        errorRate,
+        attempts: window._cryptoState.decryptionAttempts,
+        errors: window._cryptoState.decryptionErrors,
+        lastError: window._cryptoState.lastError
+      }
+    });
+    
+    window.dispatchEvent(event);
+  }
+}
+
+// 復号エラーをリッスンするヘルパー関数
+export const listenForDecryptionErrors = (callback) => {
+  // 復号エラー検出が初期化されていなければ初期化
+  if (!window._cryptoState) {
+    setupDecryptionErrorDetection();
+  }
+  
+  // イベントリスナーを追加
+  window.addEventListener('decryption-error', (event) => {
+    console.log('Decryption error event received:', event.detail);
+    if (typeof callback === 'function') {
+      callback(event.detail);
+    }
+  });
+  
+  return () => {
+    // クリーンアップ関数を返す
+    window.removeEventListener('decryption-error', callback);
+  };
+};
+
+export const setupDecryptionErrorDetection = () => {
+  // グローバル変数を作成して暗号化状態を追跡
+  window._cryptoState = {
+    decryptionAttempts: 0,
+    decryptionErrors: 0,
+    lastError: null,
+    errorThreshold: 0.3, // エラー率のしきい値（30%以上でエラーと判断）
+    resetTimer: null
+  };
+
+  // リセットタイマーを設定（10秒ごとに統計をリセット）
+  window._cryptoState.resetTimer = setInterval(() => {
+    window._cryptoState.decryptionAttempts = 0;
+    window._cryptoState.decryptionErrors = 0;
+  }, 10000);
+
+  console.log("Decryption error detection initialized");
+};
+
 
 /**
  * 文字列をBlobに変換
@@ -173,6 +274,8 @@ export const generateKeyPair = () => {
     publicKey,
   };
 };
+
+
 
 /**
  * 公開鍵でデータを暗号化

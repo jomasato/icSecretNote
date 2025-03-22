@@ -16,20 +16,6 @@ function NotesList() {
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [showDeviceSetup, setShowDeviceSetup] = useState(false);
-  
-
-  // デバイスセットアップの表示を強制する関数
-  function forceShowDeviceSetup() {
-    console.log("Forcing device setup display");
-    setShowDeviceSetup(true);
-  }
-
-  // セットアップモーダルを閉じる関数
-  function hideDeviceSetup() {
-    console.log("Hiding device setup");
-    setShowDeviceSetup(false);
-  }
-
 
   // デバウンスされたリフレッシュ関数
   const debouncedRefresh = useMemo(
@@ -398,69 +384,6 @@ const sortedNotes = [...filteredNotes].sort((a, b) => {
           ))}
         </div>
       )}
-
-
-
-// デバッグボタンを追加する
-{error && (
-  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 flex justify-between items-center">
-    <span className="block sm:inline">{error}</span>
-    <button 
-      onClick={optimizedRefresh} 
-      className="bg-red-200 hover:bg-red-300 text-red-800 font-bold py-1 px-2 rounded text-sm"
-    >
-      再試行
-    </button>
-  </div>
-)}
-
-{/* 開発環境でのみデバッグパネルを表示 */}
-{process.env.NODE_ENV === 'development' && (
-  <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4">
-    <h3 className="font-bold">デバッグパネル</h3>
-    <div className="mt-2 flex flex-wrap gap-2">
-      <button
-        onClick={forceShowDeviceSetup}
-        className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded text-sm"
-      >
-        デバイス設定を表示
-      </button>
-      <button
-        onClick={hideDeviceSetup}
-        className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm"
-      >
-        デバイス設定を非表示
-      </button>
-      <button
-        onClick={() => {
-          // localStorage からマスターキーを一時的に削除
-          const key = localStorage.getItem('masterEncryptionKey');
-          localStorage.removeItem('masterEncryptionKey');
-          console.log("Removed master key temporarily");
-          setTimeout(() => {
-            // 5秒後に復元
-            if (key) localStorage.setItem('masterEncryptionKey', key);
-            console.log("Restored master key");
-          }, 5000);
-        }}
-        className="bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1 rounded text-sm"
-      >
-        マスターキーを一時削除（5秒）
-      </button>
-      <button
-        onClick={() => console.log({
-          notes,
-          needDeviceSetup,
-          showDeviceSetup,
-          masterKey: !!localStorage.getItem('masterEncryptionKey')
-        })}
-        className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm"
-      >
-        状態をログ出力
-      </button>
-    </div>
-  </div>
-)}
 
 
     </div>

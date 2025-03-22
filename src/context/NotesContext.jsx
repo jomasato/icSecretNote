@@ -3,6 +3,7 @@ import { getNotes, createNote, updateNote, deleteNote } from '../services/api';
 import { useAuth } from './AuthContext';
 import { checkProfileExists, createProfile } from '../services/auth';
 import { generateKeyPair } from '../services/crypto';
+import { listenForDecryptionErrors, setupDecryptionErrorDetection } from '../services/crypto';
 
 
 const NotesContext = createContext();
@@ -18,6 +19,28 @@ export function NotesProvider({ children }) {
   const [noProfile, setNoProfile] = useState(false);
   const { user } = useAuth();
   const [needDeviceSetup, setNeedDeviceSetup] = useState(false);
+
+  // 追加: 復号エラー検出を初期化
+  useEffect(() => {
+    console.log("Initializing decryption error detection");
+    setupDecryptionErrorDetection();
+    
+    // 復号エラーのイベントリスナーを設定
+    const cleanupListener = listenForDecryptionErrors((errorDetails) => {
+      console.warn("Decryption error detected in NotesContext:", errorDetails);
+      setNeedDeviceSetup(true);
+      setError(`復号エラーが検出されました (${errorDetails.errors}/${errorDetails.attempts}). デバイスの設定が必要です。`);
+    });
+    
+    // クリーンアップ関数
+    return () => {
+      cleanupListener();
+      // グローバルタイマーをクリーンアップ
+      if (window._cryptoState && window._cryptoState.resetTimer) {
+        clearInterval(window._cryptoState.resetTimer);
+      }
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -60,35 +83,18 @@ export function NotesProvider({ children }) {
       setLoading(false);
       return;
     }
+
+      // マスターキー存在チェック
+      const masterKey = localStorage.getItem('masterEncryptionKey');
+      if (!masterKey && fetchedNotes.length > 0) {
+        console.warn("Master encryption key not found but notes exist!");
+        setNeedDeviceSetup(true);
+      }
       
       console.log("Fetching notes...");
       const fetchedNotes = await getNotes();
 
 
-      // ノートの復号失敗を検出
-      const decryptionFailCount = fetchedNotes.filter(note => {
-        // タイトルまたは内容が復号失敗を示すパターンと一致するか確認
-        return (
-          note.title === 'Unable to decrypt' || 
-          note.content === 'Unable to decrypt this note' ||
-          note.title?.includes('decrypt') || 
-          note.content?.includes('decrypt') ||
-          note.title === 'Error' ||
-          note.content?.includes('error')
-        );
-      }).length;
-      
-      console.log(`Notes with decryption issues: ${decryptionFailCount}/${fetchedNotes.length}`);
-      
-      // 一部のノートでも復号失敗があればフラグを立てる
-      // (少なくとも1つ以上のノートが復号失敗している場合)
-      if (fetchedNotes.length > 0 && decryptionFailCount > 0) {
-        console.log("Decryption issues detected, needDeviceSetup = true");
-        setNeedDeviceSetup(true);
-      } else {
-        console.log("No decryption issues detected, needDeviceSetup = false");
-        setNeedDeviceSetup(false);
-      }
       console.log("Notes fetched:", fetchedNotes);
       setNotes(fetchedNotes);
     } catch (err) {
