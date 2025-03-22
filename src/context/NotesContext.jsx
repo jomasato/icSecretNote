@@ -51,18 +51,44 @@ export function NotesProvider({ children }) {
         setLoading(false);
         return;
       }
+
+    // マスターキーの有効性をチェック - これを追加
+    const isKeyValid = await checkMasterKeyValid();
+    if (!isKeyValid) {
+      console.log("Master key is invalid or missing");
+      setError('復号化キーが無効または見つかりません。デバイスのセットアップが必要です。');
+      setLoading(false);
+      return;
+    }
       
       console.log("Fetching notes...");
       const fetchedNotes = await getNotes();
-    // 復号失敗の検出（ノートがあるのに内容が空/復号エラーの場合）
-    if (fetchedNotes.length > 0 && fetchedNotes.every(note => 
-      note.title === 'Unable to decrypt' || 
-      note.content === 'Unable to decrypt this note')) {
-    // 復号鍵が不足していると判断
-    setNeedDeviceSetup(true);
-  }else {
-    setNeedDeviceSetup(false);
-  }
+
+
+      // ノートの復号失敗を検出
+      const decryptionFailCount = fetchedNotes.filter(note => {
+        // タイトルまたは内容が復号失敗を示すパターンと一致するか確認
+        return (
+          note.title === 'Unable to decrypt' || 
+          note.content === 'Unable to decrypt this note' ||
+          note.title?.includes('decrypt') || 
+          note.content?.includes('decrypt') ||
+          note.title === 'Error' ||
+          note.content?.includes('error')
+        );
+      }).length;
+      
+      console.log(`Notes with decryption issues: ${decryptionFailCount}/${fetchedNotes.length}`);
+      
+      // 一部のノートでも復号失敗があればフラグを立てる
+      // (少なくとも1つ以上のノートが復号失敗している場合)
+      if (fetchedNotes.length > 0 && decryptionFailCount > 0) {
+        console.log("Decryption issues detected, needDeviceSetup = true");
+        setNeedDeviceSetup(true);
+      } else {
+        console.log("No decryption issues detected, needDeviceSetup = false");
+        setNeedDeviceSetup(false);
+      }
       console.log("Notes fetched:", fetchedNotes);
       setNotes(fetchedNotes);
     } catch (err) {
@@ -111,6 +137,38 @@ export function NotesProvider({ children }) {
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
+    }
+  }
+
+  // マスターキーのチェック関数
+  async function checkMasterKeyValid() {
+    console.log("Checking if master key is valid");
+    
+    try {
+      // localStorage からマスターキーを取得
+      const masterKey = localStorage.getItem('masterEncryptionKey');
+      
+      if (!masterKey) {
+        console.log("No master key found");
+        setNeedDeviceSetup(true);
+        return false;
+      }
+      
+      // masterKeyの形式を確認（単純な有効性チェック）
+      if (typeof masterKey !== 'string' || masterKey.length < 16) {
+        console.log("Master key is invalid format");
+        setNeedDeviceSetup(true);
+        return false;
+      }
+      
+      // 復号テストは実際のデータに対して行われるのでここでは省略
+      
+      console.log("Master key format is valid");
+      return true;
+    } catch (err) {
+      console.error("Error checking master key:", err);
+      setNeedDeviceSetup(true);
+      return false;
     }
   }
 
