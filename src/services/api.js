@@ -700,3 +700,97 @@ export const setupNewDevice = async (setupToken) => {
     throw error;
   }
 };
+
+/**
+ * リカバリー後のアカウントを有効化
+ * @param {string} userPrincipal - ユーザーのプリンシパルID
+ * @param {string} deviceName - 新しいデバイス名
+ * @param {Array<number>} publicKey - 新しいデバイスの公開鍵
+ * @returns {Promise<Object>} 結果（デバイスIDまたはエラー）
+ */
+export const activateRecoveredAccount = async (userPrincipal, deviceName, publicKey) => {
+  try {
+    const actor = await getActor();
+    
+    // バックエンドのactivateRecoveredAccount関数を呼び出し
+    const result = await actor.activateRecoveredAccount(
+      userPrincipal,
+      deviceName,
+      publicKey
+    );
+    
+    if (result.err) {
+      throw new Error(result.err);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to activate recovered account:', error);
+    throw error;
+  }
+};
+
+/**
+ * リカバリーデータを収集する
+ * @param {string} userPrincipal - 回復対象のユーザーのプリンシパルID
+ * @returns {Promise<Object>} 収集したリカバリーデータ
+ */
+export const collectRecoveryData = async (userPrincipal) => {
+  try {
+    const actor = await getActor();
+    
+    // バックエンドのcollectRecoveryData関数を呼び出し
+    const result = await actor.collectRecoveryData(userPrincipal);
+    
+    if (result.err) {
+      throw new Error(result.err);
+    }
+    
+    // IDLファイルから確認すると、結果はタプルで返ってくる
+    // [RecoverySession, Vec<KeyShare>, Opt<Vec<Nat8>>]
+    const [session, keyShares, optEncryptedMasterKey] = result.ok;
+    
+    // マスターキーの再構築はクライアント側で行う必要がある
+    // キーシェアがあれば再構築を試みる
+    let masterKey = null;
+    
+    if (keyShares && keyShares.length > 0) {
+      // シェアを抽出
+      const shares = keyShares.map(share => {
+        // 秘密鍵で復号化（秘密鍵がない場合はパスする）
+        try {
+          const devicePrivateKey = localStorage.getItem('recoveryDevicePrivateKey');
+          if (devicePrivateKey) {
+            return {
+              id: share.shareId,
+              value: decryptWithPrivateKey(share.encryptedShare, devicePrivateKey)
+            };
+          }
+        } catch (err) {
+          console.error('Failed to decrypt share:', err);
+        }
+        return null;
+      }).filter(Boolean);
+      
+      if (shares.length >= session.requiredShares) {
+        // 十分なシェアが集まった場合、マスターキーを再構築
+        masterKey = combineShares(shares);
+      }
+    }
+    
+    return {
+      session: {
+        status: Object.keys(session.status)[0],
+        requestTime: new Date(Number(session.requestTime) / 1000000),
+        approvedGuardians: session.approvedGuardians.map(p => p.toString()),
+        collectedShares: session.collectedShares,
+        tempAccessPrincipal: session.tempAccessPrincipal ? session.tempAccessPrincipal[0].toString() : null
+      },
+      keyShares,
+      masterKey
+    };
+  } catch (error) {
+    console.error('Failed to collect recovery data:', error);
+    throw error;
+  }
+};
