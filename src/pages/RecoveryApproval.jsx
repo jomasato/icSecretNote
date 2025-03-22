@@ -1,5 +1,5 @@
 import React from 'react';
-import RecoveryApproval from '../components/Recovery/RecoveryApproval';
+import RecoveryApproval from '../components/Recovery/GuardianApproval';
 
 function RecoveryApprovalPage() {
   return <RecoveryApproval />;
