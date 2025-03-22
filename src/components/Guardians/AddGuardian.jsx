@@ -114,38 +114,38 @@ function AddGuardian({ onClose, availableShares }) {
           </p>
           
           <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label htmlFor="guardianId" className="block text-gray-700 text-sm font-bold mb-2">
-                Guardian's Principal ID
-              </label>
-              <input
-                type="text"
-                id="guardianId"
-                value={guardianId}
-                onChange={(e) => setGuardianId(e.target.value)}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="e.g., w3gef-eqllq-zz..."
-                required
-              />
-            </div>
+          <div className="mb-4">
+            <label htmlFor="guardianId" className="block text-gray-700 text-sm font-bold mb-2">
+              Guardian's Principal ID
+            </label>
+            <input
+              type="text"
+              id="guardianId"
+              value={guardianId}
+              onChange={(e) => setGuardianId(e.target.value)}
+              className="bg-gray-50 border border-gray-300 text-gray-900 shadow appearance-none rounded w-full py-2 px-3 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g., w3gef-eqllq-zz..."
+              required
+            />
+          </div>
 
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!guardianId}
-                className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              >
-                Next
-              </button>
-            </div>
-          </form>
+  <div className="flex items-center justify-end">
+    <button
+      type="button"
+      onClick={onClose}
+      className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+    >
+      Cancel
+    </button>
+    <button
+      type="submit"
+      disabled={!guardianId}
+      className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-primary-400 disabled:cursor-not-allowed"
+    >
+      Next
+    </button>
+  </div>
+</form>
         </>
       )}
 

@@ -126,7 +126,7 @@ const handleGenerateQR = async (e) => {
               id="deviceName"
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="bg-gray-50 border border-gray-300 text-gray-900 shadow appearance-none rounded w-full py-2 px-3 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               placeholder="例: マイノートPC、iPhone13"
               required
             />
@@ -150,7 +150,7 @@ const handleGenerateQR = async (e) => {
             <button
               type="submit"
               disabled={loading || !deviceName.trim()}
-              className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-primary-400 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center">
@@ -192,7 +192,7 @@ const handleGenerateQR = async (e) => {
               または、以下のセットアップコードを新しいデバイスで入力してください：
             </p>
             <div className="bg-gray-100 p-2 rounded overflow-x-auto">
-              <pre className="text-xs break-all">
+              <pre className="text-sm break-all text-gray-800">
                 {setupToken}
               </pre>
             </div>
@@ -201,8 +201,11 @@ const handleGenerateQR = async (e) => {
                 navigator.clipboard.writeText(setupToken);
                 alert('セットアップコードをクリップボードにコピーしました');
               }}
-              className="mt-2 text-primary-600 hover:text-primary-800 text-sm"
+              className="mt-2 text-primary-600 hover:text-primary-800 text-sm flex items-center mx-auto"
             >
+              <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
               コピー
             </button>
           </div>
@@ -211,7 +214,7 @@ const handleGenerateQR = async (e) => {
             <button
               onClick={handleRegenerateQR}
               disabled={loading}
-              className="w-full sm:w-auto bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              className="w-full sm:w-auto bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {loading ? '再生成中...' : 'QRコードを再生成'}
             </button>
