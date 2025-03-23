@@ -118,19 +118,16 @@ export function NotesProvider({ children }) {
     console.log("setupProfile called");
     setLoading(true);
     try {
-      // デバイスのキーペアを生成
-      console.log("Generating key pair...");
-      const deviceKeyPair = await generateKeyPair();
+      // ※修正部分※ デバイスキーペア関連処理を簡略化
       
       // プロファイルを作成
       console.log("Creating profile...");
-      await createProfile('Initial Device', deviceKeyPair);
+      await createProfile('Initial Device');
       
       // プロファイル作成後にノートを再取得
       console.log("Profile created successfully");
       setNoProfile(false);
       
-      // 少し待機して再取得（非同期処理の完了を待つ）
       setTimeout(async () => {
         console.log("Fetching notes after profile creation");
         await fetchNotes();
@@ -145,8 +142,8 @@ export function NotesProvider({ children }) {
       setLoading(false);
     }
   }
-
-  // マスターキーのチェック関数
+  
+  // マスターキーのチェック関数を修正
   async function checkMasterKeyValid() {
     console.log("Checking if master key is valid");
     
@@ -160,14 +157,12 @@ export function NotesProvider({ children }) {
         return false;
       }
       
-      // masterKeyの形式を確認（単純な有効性チェック）
+      // 基本的な形式チェック
       if (typeof masterKey !== 'string' || masterKey.length < 16) {
         console.log("Master key is invalid format");
         setNeedDeviceSetup(true);
         return false;
       }
-      
-      // 復号テストは実際のデータに対して行われるのでここでは省略
       
       console.log("Master key format is valid");
       return true;

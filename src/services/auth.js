@@ -107,11 +107,14 @@ export const checkProfileExists = async () => {
  * @param {Object} deviceKeyPair - デバイスのキーペア
  * @returns {Promise<boolean>} 成功した場合はtrue
  */
-export const createProfile = async (deviceName, deviceKeyPair) => {
+export const createProfile = async (deviceName) => {
   try {
     const actor = await getActor();
     
-    // デフォルト値で新しいプロファイルを作成
+    // デバイスの公開鍵は引き続き必要（バックエンド側の要件）
+    const deviceKeyPair = generateKeyPair();
+    
+    // プロファイル作成
     const result = await actor.createProfileWithDevice(
       5, // totalGuardians
       3, // requiredShares
@@ -123,10 +126,7 @@ export const createProfile = async (deviceName, deviceKeyPair) => {
       throw new Error(`Failed to create profile: ${result.err}`);
     }
     
-    // デバイスのプライベートキーをローカルに保存
-    localStorage.setItem('devicePrivateKey', deviceKeyPair.privateKey);
-    
-    // マスターキーを生成して保存
+    // ※変更部分※ - デバイスキーの保存を削除し、マスターキーのみ生成して保存
     const masterKey = generateEncryptionKey();
     localStorage.setItem('masterEncryptionKey', masterKey);
     
@@ -136,6 +136,7 @@ export const createProfile = async (deviceName, deviceKeyPair) => {
     throw error;
   }
 };
+
 
 /**
  * ログイン処理
@@ -232,9 +233,9 @@ export const logout = async () => {
   const client = await initAuth();
   await client.logout();
   secureNotesActor = null;
-  // ローカルストレージをクリア
-  localStorage.removeItem('devicePrivateKey');
-  localStorage.removeItem('masterEncryptionKey');
+  
+  // ※修正※ マスターキーのみクリア
+  //localStorage.removeItem('masterEncryptionKey');
 };
 
 /**

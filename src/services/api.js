@@ -12,7 +12,10 @@ import {
   combineShares,
   generateKeyPair
 } from './crypto';
-
+import { 
+  encryptWithKey as improvedEncrypt,
+  decryptWithKey as improvedDecrypt
+ } from './improved-crypto';
 
 //------------------------------------------------
 // ガーディアンの公開鍵管理
@@ -141,14 +144,13 @@ export const getNotes = async (forceRefresh = false) => {
           const titleStr = blobToString(note.title);
           const contentStr = blobToString(note.content);
           
-          // JSON形式に変換して解析 (improved-crypto.jsの形式に合わせる)
+          // JSON形式に変換して解析
           const titleObj = JSON.parse(titleStr);
           const contentObj = JSON.parse(contentStr);
           
-          // improved-crypto.jsの関数を使用
-          // これはWeb Crypto APIを使用するため非同期
-          const title = await decryptWithKey(titleObj, masterKey);
-          const content = await decryptWithKey(contentObj, masterKey);
+          // WebCrypto API (improved-crypto.js) を使用
+          const title = await improvedDecrypt(titleObj, masterKey);
+          const content = await improvedDecrypt(contentObj, masterKey);
           
           // 復号失敗チェック
           if (!title || !content) {
@@ -289,19 +291,18 @@ export const getNote = async (id) => {
  */
 export const createNote = async (title, content) => {
   try {
-    const actor = await getActor();
-    
     // マスターキーを取得
+    const actor = await getActor();
     const masterKey = localStorage.getItem('masterEncryptionKey');
     if (!masterKey) {
       throw new Error('Master encryption key not found');
     }
     
-    // improved-crypto.jsの関数を使用して暗号化
-    const encryptedTitle = await encryptWithKey(title, masterKey);
-    const encryptedContent = await encryptWithKey(content, masterKey);
+    // WebCrypto API (improved-crypto.js) を使用
+    const encryptedTitle = await improvedEncrypt(title, masterKey);
+    const encryptedContent = await improvedEncrypt(content, masterKey);
     
-    // 暗号化データをBlobに変換
+    // 暗号化データをBlobに変換 (encryptedData, ivを含むオブジェクト)
     const titleBlob = stringToBlob(JSON.stringify(encryptedTitle));
     const contentBlob = stringToBlob(JSON.stringify(encryptedContent));
     
@@ -340,8 +341,8 @@ export const updateNote = async (id, title, content) => {
     }
     
     // improved-crypto.jsの関数を使用して暗号化
-    const encryptedTitle = await encryptWithKey(title, masterKey);
-    const encryptedContent = await encryptWithKey(content, masterKey);
+    const encryptedTitle = await improvedEncrypt(title, masterKey);
+    const encryptedContent = await improvedEncrypt(content, masterKey);
     
     // 暗号化データをBlobに変換
     const titleBlob = stringToBlob(JSON.stringify(encryptedTitle));
@@ -1018,38 +1019,40 @@ export const finalizeRecovery = async (userPrincipal, tempAccessPrincipal, publi
   }
 };
 
-
 export const setupDeviceLink = async () => {
   try {
-    // 1. 新デバイス用のキーペアをフロントエンドで生成
-    const newDeviceKeyPair = await generateKeyPair();
+    // ※修正部分※ キーペアの生成と暗号化を削除
     
-    // 2. マスターキーを取得
+    // マスターキーを取得
     const masterKey = localStorage.getItem('masterEncryptionKey');
+    const actor = await getActor();
     if (!masterKey) {
       throw new Error('マスターキーが見つかりません');
     }
     
-    // 3. マスターキーを新デバイスの公開鍵で暗号化
-    const encryptedMasterKey = await encryptWithPublicKey(masterKey, newDeviceKeyPair.publicKey);
-    
-    // 4. 既存の addDevice API を呼び出して新デバイスを登録
+    // ※修正部分※ デバイス登録（キャニスターに変更があれば対応）
     const deviceName = "新しいデバイス (QR連携)";
-    const result = await addDevice(deviceName, newDeviceKeyPair.publicKey, encryptedMasterKey);
+    const deviceKeyPair = await generateKeyPair(); // バックエンド要件で必要な場合
+    
+    const result = await actor.addDevice(
+      deviceName, 
+      deviceKeyPair.publicKey,
+      null // 暗号化されたマスターキーは不要
+    );
     
     if (result.err) {
       throw new Error(result.err || "デバイス追加に失敗しました");
     }
     
-    // 5. 連携データを作成
+    // ※修正部分※ 連携データにマスターキーを直接含める
     const linkData = {
       deviceId: result.ok,
-      privateKey: newDeviceKeyPair.privateKey,
+      masterKey: masterKey, // マスターキーを直接送信
       userPrincipal: await getCurrentPrincipal(),
-      expiresAt: Date.now() + 10 * 60 * 1000    // 10分間有効
+      expiresAt: Date.now() + 10 * 60 * 1000 // 10分間有効
     };
     
-    // 6. JSON化してBase64エンコード
+    // JSON化してBase64エンコード
     const linkToken = btoa(JSON.stringify(linkData));
     
     return { 
@@ -1062,42 +1065,21 @@ export const setupDeviceLink = async () => {
   }
 };
 
-/**
- * QRコードスキャン結果を処理して新デバイスを設定
- * @param {string} scanResult - QRコードスキャン結果（Base64エンコードされたJSON）
- * @returns {Promise<boolean>} 処理が成功したかどうか
- */
 export const processDeviceLinkResult = async (scanResult) => {
   try {
-    // 1. QRコードからデータを抽出
+    // QRコードからデータを抽出
     const linkData = JSON.parse(atob(scanResult));
     
-    // 2. 有効期限をチェック
+    // 有効期限をチェック
     if (Date.now() > linkData.expiresAt) {
       throw new Error("QRコードの有効期限が切れています");
     }
     
-    // 3. デバイス情報をローカルに保存
+    // ※修正部分※ デバイスIDのみ保存
     localStorage.setItem('deviceId', linkData.deviceId);
-    localStorage.setItem('devicePrivateKey', linkData.privateKey);
     
-    // 4. マスターキーを取得
-    const actor = await getActor();
-    const accessKeyResult = await actor.getAccessKey();
-    
-    if (accessKeyResult.err) {
-      throw new Error(accessKeyResult.err || "アクセスキーの取得に失敗しました");
-    }
-    
-    // 5. 秘密鍵を使用してマスターキーを復号
-    const encryptedMasterKey = accessKeyResult.ok;
-    const masterKey = await decryptWithPrivateKey(
-      encryptedMasterKey,
-      linkData.privateKey
-    );
-    
-    // 6. マスターキーをローカルに保存
-    localStorage.setItem('masterEncryptionKey', masterKey);
+    // ※修正部分※ マスターキーを直接保存
+    localStorage.setItem('masterEncryptionKey', linkData.masterKey);
     
     return true; // 連携成功
   } catch (error) {
