@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Principal } from '@dfinity/principal';
-import { addGuardian, getGuardianPublicKey, saveGuardianPublicKey } from '../../services/api';
+import { addGuardian } from '../../services/api';
 
 function AddGuardian({ onClose, availableShares }) {
   const [guardianId, setGuardianId] = useState('');
-  const [guardianPublicKey, setGuardianPublicKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState(1);
@@ -41,20 +40,11 @@ function AddGuardian({ onClose, availableShares }) {
       try {
         Principal.fromText(guardianId);
         
-        // 次のステップ（公開鍵入力）へ
+        // ステップ2（シェア選択）へ進む
         setStep(2);
       } catch (err) {
         setError('Invalid guardian ID. Please enter a valid Internet Identity principal.');
       }
-    } else if (step === 2) {
-      // 公開鍵の検証
-      if (!guardianPublicKey.trim()) {
-        setError('Guardian public key is required');
-        return;
-      }
-      
-      // シェア選択ステップへ
-      setStep(3);
     } else {
       // シェア割り当てとガーディアン追加
       setLoading(true);
@@ -63,10 +53,14 @@ function AddGuardian({ onClose, availableShares }) {
           throw new Error('Please select a share to assign to this guardian');
         }
         
-        // ガーディアン追加とシェア割り当て
-        await addGuardian(guardianId, guardianPublicKey, selectedShare);
+        // ガーディアン追加とシェア割り当て（公開鍵暗号化なしで直接シェアを保存）
+        const result = await addGuardian(guardianId, selectedShare);
         
-        // 利用可能なシェアを更新
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to add guardian');
+        }
+        
+        // 利用可能なシェアを更新（使用済みシェアを除外）
         const updatedShares = recoveryShares.filter(share => share.id !== selectedShare.id);
         localStorage.setItem('recoveryShares', JSON.stringify(updatedShares));
         
@@ -85,9 +79,7 @@ function AddGuardian({ onClose, availableShares }) {
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">
-          {step === 1 ? 'Add Guardian' : 
-           step === 2 ? 'Guardian Public Key' :
-           'Assign Recovery Share'}
+          {step === 1 ? 'Add Guardian' : 'Assign Recovery Share'}
         </h2>
         <button
           onClick={onClose}
@@ -152,51 +144,6 @@ function AddGuardian({ onClose, availableShares }) {
       {step === 2 && (
         <>
           <p className="text-gray-600 mb-4">
-            Enter the public key of the guardian. The guardian can share this with you securely.
-          </p>
-          
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label htmlFor="guardianPublicKey" className="block text-gray-700 text-sm font-bold mb-2">
-                Guardian's Public Key
-              </label>
-              <textarea
-                id="guardianPublicKey"
-                value={guardianPublicKey}
-                onChange={(e) => setGuardianPublicKey(e.target.value)}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                placeholder="Paste the guardian's public key here"
-                rows={4}
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                The public key is used to encrypt their share securely.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                disabled={!guardianPublicKey}
-                className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              >
-                Next
-              </button>
-            </div>
-          </form>
-        </>
-      )}
-
-      {step === 3 && (
-        <>
-          <p className="text-gray-600 mb-4">
             Select a recovery share to assign to this guardian. Each share is a unique piece of your recovery key.
             You'll need a certain number of shares to recover your account.
           </p>
@@ -243,7 +190,7 @@ function AddGuardian({ onClose, availableShares }) {
               <div className="flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(1)}
                   className="mr-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
                 >
                   Back

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { generateInvitationToken } from '../../services/api';
+import { trackInvite } from '../../services/inviteTracking';
 
 function GuardianInvitation({ onClose, userPrincipal }) {
   const [invitationToken, setInvitationToken] = useState(null);
@@ -8,6 +8,7 @@ function GuardianInvitation({ onClose, userPrincipal }) {
   const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(0);
   const [emailInvite, setEmailInvite] = useState('');
+  const [invitationLink, setInvitationLink] = useState(''); // 招待リンクを保存する状態を追加
 
   // 初期化時に招待トークンを生成
   useEffect(() => {
@@ -24,12 +25,20 @@ function GuardianInvitation({ onClose, userPrincipal }) {
     } else if (countdown === 0 && invitationToken) {
       // タイムアウト時の処理
       setInvitationToken(null);
+      setInvitationLink(''); // リンクもクリア
     }
     
     return () => {
       if (timer) clearInterval(timer);
     };
   }, [invitationToken, countdown]);
+
+  // トークンが更新されたらリンクも更新
+  useEffect(() => {
+    if (invitationToken) {
+      updateInvitationLink();
+    }
+  }, [invitationToken, userPrincipal]);
 
   // 招待トークンの生成
   const generateToken = async () => {
@@ -68,6 +77,93 @@ function GuardianInvitation({ onClose, userPrincipal }) {
     }
   };
 
+  const getAvailableShare = async (userPrincipal) => {
+    try {
+      // Get available shares from localStorage
+      const sharesJson = localStorage.getItem('recoveryShares');
+      if (!sharesJson) {
+        console.error('No recovery shares available');
+        return null;
+      }
+      
+      const shares = JSON.parse(sharesJson);
+      if (!shares || shares.length === 0) {
+        console.error('Recovery shares is empty');
+        return null;
+      }
+      
+      // Choose the first available share
+      const shareToAssign = shares[0];
+      
+      // Create share data structure
+      return {
+        shareInfo: shareToAssign,
+        inviterPrincipal: userPrincipal
+      };
+    } catch (err) {
+      console.error('Failed to get available share:', err);
+      return null;
+    }
+  };
+  
+  // 招待リンク生成関数 - 状態を更新するように変更
+  const updateInvitationLink = async () => {
+    if (!invitationToken || !userPrincipal) return;
+    
+    const baseUrl = window.location.origin;
+    
+    try {
+      // Get share data to include in the URL
+      const shareData = await getAvailableShare(userPrincipal);
+      
+      let generatedLink;
+      if (!shareData) {
+        generatedLink = `${baseUrl}/guardian-invite?token=${invitationToken}&principal=${userPrincipal}`;
+      } else {
+        // Encode share data to include in URL
+        const encodedShareData = encodeURIComponent(btoa(JSON.stringify(shareData)));
+        
+        // Track which share is being used in this invitation
+        if (shareData.shareInfo && shareData.shareInfo.id) {
+          try {
+            await trackInvite({
+              token: invitationToken,
+              userPrincipal,
+              shareId: shareData.shareInfo.id,
+              expiresAt: Date.now() + (countdown * 1000),
+              shareData: shareData
+            });
+            
+            // シェアを予約したら localStorage からも削除
+            const sharesJson = localStorage.getItem('recoveryShares');
+            if (sharesJson) {
+              const shares = JSON.parse(sharesJson);
+              const updatedShares = shares.filter(share => share.id !== shareData.shareInfo.id);
+              console.log('招待用シェア予約:', {
+                元のシェア数: shares.length,
+                残りシェア数: updatedShares.length,
+                使用シェアID: shareData.shareInfo.id
+              });
+              localStorage.setItem('recoveryShares', JSON.stringify(updatedShares));
+            }
+          } catch (trackErr) {
+            console.error('Failed to track invitation share:', trackErr);
+          }
+        }
+        
+        generatedLink = `${baseUrl}/guardian-invite?token=${invitationToken}&principal=${userPrincipal}&shareData=${encodedShareData}`;
+      }
+      
+      // 状態を更新
+      setInvitationLink(generatedLink);
+    } catch (err) {
+      console.error('Error generating invitation link:', err);
+      // Fallback to link without share data
+      const fallbackLink = `${baseUrl}/guardian-invite?token=${invitationToken}&principal=${userPrincipal}`;
+      setInvitationLink(fallbackLink);
+    }
+  };
+
   // Eメール招待の送信
   const handleSendEmailInvite = (e) => {
     e.preventDefault();
@@ -77,26 +173,39 @@ function GuardianInvitation({ onClose, userPrincipal }) {
       return;
     }
     
-    // メールアプリを開く
-    const subject = encodeURIComponent('セキュアノートのガーディアン招待');
-    const body = encodeURIComponent(
-      `
+    if (!invitationLink) {
+      setError('招待リンクがまだ生成されていません');
+      return;
+    }
+    
+    try {
+      // Open mail app with the already generated invitation link
+      const subject = encodeURIComponent('セキュアノートのガーディアン招待');
+      const body = encodeURIComponent(`
 あなたがセキュアノートアプリのガーディアンとして招待されました。
-以下の招待コードを使用して、アカウント回復のガーディアンになってください。
+以下の招待リンクをクリックして、アカウント回復のガーディアンになってください。
 
+招待リンク: ${invitationLink}
+
+または以下の招待コードを使用してください:
 招待コード: ${invitationToken}
 
-この招待コードは ${formatTime(countdown)} 後に無効になります。
-      `
-    );
-    
-    window.open(`mailto:${emailInvite}?subject=${subject}&body=${body}`);
+この招待は ${formatTime(countdown)} 後に無効になります。
+      `);
+      
+      window.open(`mailto:${emailInvite}?subject=${subject}&body=${body}`);
+    } catch (err) {
+      console.error('Failed to generate invitation email:', err);
+      setError('招待メールの生成に失敗しました');
+    }
   };
-  
-  // 招待リンクの生成
-  const getInvitationLink = () => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/guardian-invite?token=${invitationToken}&principal=${userPrincipal}`;
+
+  // リンクをクリップボードにコピー
+  const copyInvitationLink = () => {
+    if (invitationLink) {
+      navigator.clipboard.writeText(invitationLink);
+      alert('招待リンクをクリップボードにコピーしました');
+    }
   };
 
   return (
@@ -150,19 +259,22 @@ function GuardianInvitation({ onClose, userPrincipal }) {
             </p>
           </div>
 
-          <div className="mb-6 text-center">
-            <h4 className="text-md font-medium text-gray-800 mb-2">QRコード</h4>
-            <div className="bg-white p-4 inline-block rounded-lg shadow-md mb-2">
-              <QRCodeSVG
-                value={getInvitationLink()}
-                size={180}
-                level="H"
-                includeMargin={true}
-              />
+          <div className="mb-6">
+            <h4 className="text-md font-medium text-gray-800 mb-2">招待リンク</h4>
+            <div className="bg-gray-100 p-2 rounded overflow-x-auto mb-2">
+              <pre className="text-xs break-all">
+                {invitationLink || '招待リンクを生成中...'}
+              </pre>
             </div>
-            <p className="text-sm text-gray-600">
-              ガーディアンに上記のQRコードをスキャンしてもらってください
-            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={copyInvitationLink}
+                disabled={!invitationLink}
+                className="text-primary-600 hover:text-primary-800 text-sm disabled:text-gray-400"
+              >
+                コピー
+              </button>
+            </div>
           </div>
 
           <div className="mb-6">
@@ -198,7 +310,8 @@ function GuardianInvitation({ onClose, userPrincipal }) {
               />
               <button
                 type="submit"
-                className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                disabled={!invitationLink}
+                className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-primary-400"
               >
                 送信
               </button>

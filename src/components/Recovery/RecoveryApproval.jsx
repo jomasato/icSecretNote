@@ -1,3 +1,5 @@
+import { getSharesByUserPrincipal } from '../../services/guardianStorage';
+
 import React, { useState, useEffect } from 'react';
 import { 
   getPendingRecoveryRequests, 
@@ -33,42 +35,68 @@ function RecoveryApproval() {
     }
   };
 
-  // リカバリーの承認
-  const handleApproveRecovery = async (request) => {
-    setApproving(true);
-    setError(null);
-    setSuccess(null);
-    setSelectedRequest(request);
+// リカバリーの承認
+const handleApproveRecovery = async (request) => {
+  setApproving(true);
+  setError(null);
+  setSuccess(null);
+  setSelectedRequest(request);
+  
+  try {
+    // IndexedDBからシェアを取得
+    const userShares = await getSharesByUserPrincipal(request.principal);
     
-    try {
-      // リカバリーの承認
-      const approveResult = await approveRecovery(request.principal);
+    // リカバリーの承認
+    const approveResult = await approveRecovery(request.principal);
+    
+    if (!approveResult.success) {
+      throw new Error(approveResult.error || 'リカバリーの承認に失敗しました');
+    }
+    
+    // シェアが見つかった場合、それを提出
+    if (userShares && userShares.length > 0) {
+      console.log(`Found ${userShares.length} shares for principal ${request.principal}`);
       
-      if (!approveResult.success) {
-        throw new Error(approveResult.error || 'リカバリーの承認に失敗しました');
-      }
-      
-      // リカバリーシェアの提出
-      if (request.shareId) {
-        const shareResult = await submitRecoveryShare(request.principal, request.shareId);
-        
-        if (!shareResult.success) {
-          throw new Error(shareResult.error || 'リカバリーシェアの提出に失敗しました');
+      // すべてのシェアを提出
+      for (const share of userShares) {
+        try {
+          console.log(`Submitting share ${share.id}`);
+          const shareResult = await submitRecoveryShare(request.principal, share.id);
+          
+          if (!shareResult.success) {
+            console.warn(`シェア ${share.id} の提出に失敗: ${shareResult.error}`);
+          } else {
+            console.log(`シェア ${share.id} の提出に成功`);
+          }
+        } catch (shareErr) {
+          console.warn(`シェア提出エラー: ${shareErr.message}`);
+          // 個別のシェア提出エラーはスキップして続行
         }
       }
+    } else if (request.shareId) {
+      // リクエストに直接シェアIDが含まれている場合（レガシーサポート）
+      console.log(`Using request shareId: ${request.shareId}`);
+      const shareResult = await submitRecoveryShare(request.principal, request.shareId);
       
-      // 成功メッセージを設定
-      setSuccess(`${formatPrincipal(request.principal)}のリカバリーリクエストを承認しました`);
-      
-      // リクエストリストを更新（承認済みのものを削除）
-      setRequests(prev => prev.filter(r => r.id !== request.id));
-    } catch (err) {
-      console.error('Recovery approval failed:', err);
-      setError(err.message || 'リカバリーの承認に失敗しました');
-    } finally {
-      setApproving(false);
+      if (!shareResult.success) {
+        console.warn(`シェア ${request.shareId} の提出に失敗: ${shareResult.error}`);
+      }
+    } else {
+      console.warn('No shares found for this user');
     }
-  };
+    
+    // 成功メッセージを設定
+    setSuccess(`${formatPrincipal(request.principal)}のリカバリーリクエストを承認しました`);
+    
+    // リクエストリストを更新（承認済みのものを削除）
+    setRequests(prev => prev.filter(r => r.id !== request.id));
+  } catch (err) {
+    console.error('Recovery approval failed:', err);
+    setError(err.message || 'リカバリーの承認に失敗しました');
+  } finally {
+    setApproving(false);
+  }
+};
 
   // プリンシパルIDの表示用フォーマット
   const formatPrincipal = (principal) => {

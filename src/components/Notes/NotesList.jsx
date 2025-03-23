@@ -334,7 +334,6 @@ const sortedNotes = [...filteredNotes].sort((a, b) => {
           </div>
         </div>
       )}
-{/*}
         {showDeviceSetup && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="w-full max-w-md bg-white rounded-lg shadow-xl">
@@ -353,7 +352,7 @@ const sortedNotes = [...filteredNotes].sort((a, b) => {
             </div>
           </div>
         )}
-*/}
+        
       {sortedNotes.length === 0 ? (
         <div className="text-center py-12">
           <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

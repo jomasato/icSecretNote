@@ -413,38 +413,29 @@ export const getGuardians = async () => {
  * @param {Object} share - ガーディアンに割り当てるシェア
  * @returns {boolean} 成功した場合はtrue
  */
-export const addGuardian = async (guardianPrincipal, guardianPublicKey, share) => {
+export const addGuardian = async (guardianPrincipal, share) => {
   try {
     const actor = await getActor();
     
-    // ガーディアンの公開鍵をローカルに保存
-    saveGuardianPublicKey(guardianPrincipal, guardianPublicKey);
+    // シェア情報をそのまま保存
+    console.log(`Adding guardian ${guardianPrincipal} with share ID: ${share.id}`);
     
-    // シェアをガーディアンの公開鍵で暗号化
-    const encryptedShare = await encryptWithPublicKey(
-      {
-        share: share.value,
-        encryptedAt: new Date().toISOString()
-      },
-      stringToBlob(guardianPublicKey)
-    );
-    
-    // ガーディアンを追加
+    // manageGuardian関数を呼び出し（暗号化なし）
     const result = await actor.manageGuardian(
       guardianPrincipal,
       { Add: null },
-      encryptedShare,
-      share.id
+      null, // 暗号化データはnull
+      share.id  // シェアIDを引き渡す
     );
     
     if (result.err) {
       throw new Error(result.err);
     }
     
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('Failed to add guardian:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
 };
 
