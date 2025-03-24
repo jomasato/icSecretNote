@@ -9,6 +9,8 @@ import {
   generateEncryptionKey,
   decryptWithPrivateKey
 } from './crypto';
+import { saveUserMasterKey,getUserMasterKey } from './improved-crypto';
+
 
 // 定数
 const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
@@ -110,6 +112,11 @@ export const checkProfileExists = async () => {
 export const createProfile = async (deviceName) => {
   try {
     const actor = await getActor();
+    const principal = await getCurrentPrincipal();
+    
+    if (!principal) {
+      throw new Error('User principal not found. Please login first.');
+    }
     
     // デバイスの公開鍵は引き続き必要（バックエンド側の要件）
     const deviceKeyPair = generateKeyPair();
@@ -126,9 +133,10 @@ export const createProfile = async (deviceName) => {
       throw new Error(`Failed to create profile: ${result.err}`);
     }
     
-    // ※変更部分※ - デバイスキーの保存を削除し、マスターキーのみ生成して保存
+    // ユーザー固有のマスターキーを生成・保存
     const masterKey = generateEncryptionKey();
-    localStorage.setItem('masterEncryptionKey', masterKey);
+    saveUserMasterKey(principal.toString(), masterKey);
+    console.log('Created profile with new master key for:', principal.toString().substring(0, 8) + '...');
     
     return true;
   } catch (error) {

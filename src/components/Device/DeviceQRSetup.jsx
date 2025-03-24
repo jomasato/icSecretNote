@@ -3,6 +3,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { addDevice } from '../../services/api';
 import { generateKeyPair } from '../../services/crypto';
 import { setupDeviceLink } from '../../services/api';
+import { getUserMasterKey } from '../../services/improved-crypto';
+import { getCurrentPrincipal } from '../../services/auth';
 
 function DeviceQRSetup({ onClose, onComplete }) {
   const [deviceName, setDeviceName] = useState('');
@@ -37,8 +39,17 @@ const handleGenerateQR = async (e) => {
   setError(null);
   
   try {
-    // 新しいsetupDeviceLink関数を呼び出し
-    const result = await setupDeviceLink();
+    // ユーザーのプリンシパルを取得
+    const userPrincipal = await getCurrentPrincipal();
+    
+    // ユーザー固有のマスターキーを取得
+    const masterKey = getUserMasterKey(userPrincipal.toString());
+    if (!masterKey) {
+      throw new Error('マスターキーが見つかりません');
+    }
+    
+    // 新しいsetupDeviceLink関数を呼び出し - マスターキーを渡す
+    const result = await setupDeviceLink(masterKey);
     
     if (!result || !result.token) {
       throw new Error('デバイスの追加に失敗しました');

@@ -1242,3 +1242,55 @@ function testSimple() {
   }
 
   console.log("テスト結果:", testSimple() ? "成功" : "失敗");
+
+  /**
+ * ユーザー固有のマスターキーを保存
+ * @param {string} principal - ユーザーのプリンシパルID
+ * @param {string} masterKey - 保存するマスターキー
+ * @returns {boolean} 成功した場合はtrue
+ */
+export const saveUserMasterKey = (principal, masterKey) => {
+  if (!principal) {
+    console.error('Cannot save master key: Principal ID is missing');
+    return false;
+  }
+  const keyName = `${principal}_masterEncryptionKey`;
+  localStorage.setItem(keyName, masterKey);
+  console.log(`Saved master key for user: ${principal.substring(0, 8)}...`);
+  return true;
+};
+
+/**
+ * ユーザー固有のマスターキーを取得
+ * @param {string} principal - ユーザーのプリンシパルID
+ * @returns {string|null} マスターキーまたはnull
+ */
+export const getUserMasterKey = (principal) => {
+  if (!principal) {
+    console.error('Cannot get master key: Principal ID is missing');
+    return null;
+  }
+  const keyName = `${principal}_masterEncryptionKey`;
+  const key = localStorage.getItem(keyName);
+  
+  // 後方互換性: 古い形式のキーを確認
+  if (!key && principal) {
+    const legacyKey = localStorage.getItem('masterEncryptionKey');
+    if (legacyKey) {
+      console.log('Found legacy master key, migrating to user-specific format');
+      saveUserMasterKey(principal, legacyKey);
+      return legacyKey;
+    }
+  }
+  
+  return key;
+};
+
+/**
+ * 特定のユーザーのマスターキーが存在するか確認
+ * @param {string} principal - ユーザーのプリンシパルID
+ * @returns {boolean} キーが存在する場合はtrue
+ */
+export const hasUserMasterKey = (principal) => {
+  return !!getUserMasterKey(principal);
+};

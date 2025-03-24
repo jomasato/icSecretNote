@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { isAuthenticated, login, logout, getCurrentPrincipal } from '../services/auth';
+import { getUserMasterKey, saveUserMasterKey, generateEncryptionKey } from '../services/improved-crypto';
 
 // 認証コンテキストの作成
 const AuthContext = createContext();
@@ -49,9 +50,23 @@ export function AuthProvider({ children }) {
   async function handleLogin() {
     setLoading(true);
     try {
-      // 簡略化のため、パスワードは空文字列で渡す（デモ環境でのみ）
+      // Internet Identity認証を実行
       const result = await login();
       const principal = result.principal;
+      
+      if (!principal) {
+        throw new Error('Authentication failed: No principal ID returned');
+      }
+      
+      // ユーザー固有のマスターキーをチェック
+      if (!getUserMasterKey(principal)) {
+        // マスターキーがない場合は新規作成
+        const masterKey = generateEncryptionKey();
+        saveUserMasterKey(principal, masterKey);
+        console.log('Generated new master key for user:', principal.substring(0, 8) + '...');
+      } else {
+        console.log('Using existing master key for user:', principal.substring(0, 8) + '...');
+      }
       
       setUser({
         principal: principal,
@@ -60,7 +75,7 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('Internet Identity login failed:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);

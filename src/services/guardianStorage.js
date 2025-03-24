@@ -180,7 +180,7 @@ const openDatabase = (dbName = DB_NAME, version = 1) => {
       };
     });
   };
-  
+
   /**
    * 特定のユーザーのシェアを全て取得
    * @param {string} userPrincipal - ユーザーのプリンシパルID
@@ -195,7 +195,7 @@ const openDatabase = (dbName = DB_NAME, version = 1) => {
     console.log('Fetching shares for principal:', userPrincipal);
     
     try {
-      // Open the database
+      // データベースを開く
       const db = await openGuardianSharesDB();
       
       return new Promise((resolve, reject) => {
@@ -378,3 +378,5 @@ export const updateShareUserName = async (shareId, userName) => {
     return false;
   }
 };
+
+// Duplicate function removed

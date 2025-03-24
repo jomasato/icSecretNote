@@ -14,7 +14,8 @@ import {
 } from './crypto';
 import { 
   encryptWithKey as improvedEncrypt,
-  decryptWithKey as improvedDecrypt
+  decryptWithKey as improvedDecrypt,
+  getUserMasterKey
  } from './improved-crypto';
 
 //------------------------------------------------
@@ -107,7 +108,7 @@ const pendingRequests = {
  * @param {boolean} forceRefresh - キャッシュを無視して強制的に再取得するか
  * @returns {Promise<Array>} 復号されたノートの配列
  */
-export const getNotes = async (forceRefresh = false) => {
+export const getNotes = async (masterKey, forceRefresh = false) => {
   // 既に進行中のリクエストがあれば、それを返す
   if (pendingRequests.getNotes) {
     return pendingRequests.getNotes;
@@ -122,18 +123,23 @@ export const getNotes = async (forceRefresh = false) => {
   }
   
   try {
-    // 新しいリクエストのPromiseを生成して保存
     pendingRequests.getNotes = (async () => {
       const actor = await getActor();
       const result = await actor.getNotes();
       
-      // マスターキーを取得
-      const masterKey = localStorage.getItem('masterEncryptionKey');
+      // まずノートが存在するかチェック
+      if (!result || result.length === 0) {
+        console.log("No notes found for this user");
+        return []; // 空の配列を返す（エラーにしない）
+      }
+      
+      // ノートがある場合のみマスターキーをチェック
       if (!masterKey) {
         const error = new Error('Master encryption key not found');
         error.code = 'NO_MASTER_KEY';
         throw error;
       }
+      
       // 復号エラーカウンター
       let decryptionErrorCount = 0;
       
@@ -166,9 +172,8 @@ export const getNotes = async (forceRefresh = false) => {
             updated: new Date(Number(note.updated) / 1000000)
           };
         } catch (error) {
-          // エラーをカウント
+          // エラーカウント
           decryptionErrorCount++;
-          
           console.error(`Failed to decrypt note ${note.id}:`, error);
           return {
             id: note.id,
@@ -176,7 +181,7 @@ export const getNotes = async (forceRefresh = false) => {
             content: 'Unable to decrypt this note',
             created: new Date(Number(note.created) / 1000000),
             updated: new Date(Number(note.updated) / 1000000),
-            _decryptionFailed: true // 復号失敗フラグ
+            _decryptionFailed: true
           };
         }
       }));
@@ -289,11 +294,11 @@ export const getNote = async (id) => {
  * @param {string} content - ノートの内容
  * @returns {string} 作成されたノートのID
  */
-export const createNote = async (title, content) => {
+export const createNote = async (title, content, masterKey) => {
   try {
-    // マスターキーを取得
     const actor = await getActor();
-    const masterKey = localStorage.getItem('masterEncryptionKey');
+    
+    // マスターキーのチェック
     if (!masterKey) {
       throw new Error('Master encryption key not found');
     }
@@ -302,7 +307,7 @@ export const createNote = async (title, content) => {
     const encryptedTitle = await improvedEncrypt(title, masterKey);
     const encryptedContent = await improvedEncrypt(content, masterKey);
     
-    // 暗号化データをBlobに変換 (encryptedData, ivを含むオブジェクト)
+    // 暗号化データをBlobに変換
     const titleBlob = stringToBlob(JSON.stringify(encryptedTitle));
     const contentBlob = stringToBlob(JSON.stringify(encryptedContent));
     
@@ -330,12 +335,11 @@ export const createNote = async (title, content) => {
  * @param {string} content - 新しい内容
  * @returns {boolean} 成功した場合はtrue
  */
-export const updateNote = async (id, title, content) => {
+export const updateNote = async (id, title, content, masterKey) => {
   try {
     const actor = await getActor();
     
-    // マスターキーを取得
-    const masterKey = localStorage.getItem('masterEncryptionKey');
+    // マスターキーをチェック
     if (!masterKey) {
       throw new Error('Master encryption key not found');
     }
@@ -554,15 +558,10 @@ export const submitRecoveryShare = async (userPrincipal, shareId) => {
   try {
     const actor = await getActor();
     const result = await actor.submitRecoveryShare(userPrincipal, shareId);
-    
-    if (result.err) {
-      throw new Error(result.err);
-    }
-    
-    return true;
+    return result; // { ok: null } または { err: string }
   } catch (error) {
     console.error('Failed to submit recovery share:', error);
-    throw error;
+    return { err: error.message };
   }
 };
 
@@ -762,22 +761,11 @@ export const setupNewDevice = async (setupToken) => {
 export const activateRecoveredAccount = async (userPrincipal, deviceName, publicKey) => {
   try {
     const actor = await getActor();
-    
-    // バックエンドのactivateRecoveredAccount関数を呼び出し
-    const result = await actor.activateRecoveredAccount(
-      userPrincipal,
-      deviceName,
-      publicKey
-    );
-    
-    if (result.err) {
-      throw new Error(result.err);
-    }
-    
-    return result;
+    const result = await actor.activateRecoveredAccount(userPrincipal, deviceName, publicKey);
+    return result; // { ok: deviceId } または { err: string }
   } catch (error) {
-    console.error('Failed to activate recovered account:', error);
-    throw error;
+    console.error('アカウントリカバリーに失敗:', error);
+    return { err: error.message };
   }
 };
 
@@ -992,32 +980,27 @@ export const getPendingRecoveryRequests = async () => {
  */
 export const finalizeRecovery = async (userPrincipal, tempAccessPrincipal, publicKey) => {
   try {
-    // 実際のキャニスターAPIでは、複数のステップを実行します：
-    // 1. リカバリーセッションを検証
-    // 2. マスターキーを復元
-    // 3. 新しいデバイスに暗号化したマスターキーを提供
-    
-    // このモック実装では、成功を返します
-    return {
-      success: true
-    };
-  } catch (err) {
-    console.error('Failed to finalize recovery:', err);
-    return {
-      success: false,
-      error: err.message || 'リカバリーの最終処理に失敗しました'
-    };
+    const actor = await getActor();
+    const result = await actor.finalizeRecovery(userPrincipal, tempAccessPrincipal, publicKey);
+    return result; // { ok: null } または { err: string }
+  } catch (error) {
+    console.error('最終リカバリーに失敗:', error);
+    return { err: error.message };
   }
 };
 
-export const setupDeviceLink = async () => {
+export const setupDeviceLink = async (masterKey) => {
   try {
-    // マスターキーを取得
-    const masterKey = localStorage.getItem('masterEncryptionKey');
-    const actor = await getActor();
+    // マスターキーを確認
     if (!masterKey) {
-      throw new Error('マスターキーが見つかりません');
+      const userPrincipal = await getCurrentPrincipal();
+      masterKey = getUserMasterKey(userPrincipal.toString());
+      if (!masterKey) {
+        throw new Error('マスターキーが見つかりません');
+      }
     }
+    
+    const actor = await getActor();
     
     // デバイス用の新しいキーペアを生成
     const deviceKeyPair = await generateKeyPair();
@@ -1026,13 +1009,10 @@ export const setupDeviceLink = async () => {
     // 方法1: ダミーデータを渡す場合
     const encryptedMasterKey = stringToBlob(JSON.stringify({dummy: true}));
     
-    // 方法2: 実際にマスターキーを暗号化して渡す場合
-    // const encryptedMasterKey = await encryptWithPublicKey(masterKey, deviceKeyPair.publicKey);
-    
     const result = await actor.addDevice(
       "新しいデバイス (QR連携)", 
       deviceKeyPair.publicKey,
-      encryptedMasterKey // nullではなく何らかのデータを渡す
+      encryptedMasterKey
     );
     
     if (result.err) {

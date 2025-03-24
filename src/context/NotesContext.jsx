@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getNotes, createNote, updateNote, deleteNote } from '../services/api';
 import { useAuth } from './AuthContext';
-import { checkProfileExists, createProfile } from '../services/auth';
+import { checkProfileExists, createProfile,getActor } from '../services/auth';
 import { generateKeyPair } from '../services/crypto';
 import { listenForDecryptionErrors, setupDecryptionErrorDetection } from '../services/crypto';
+import { getUserMasterKey } from '../services/improved-crypto';
 
 
 const NotesContext = createContext();
@@ -55,64 +56,71 @@ export function NotesProvider({ children }) {
     }
   }, [user]);
 
-  async function fetchNotes() {
-    console.log("fetchNotes called");
-    setLoading(true);
-    setError(null);
-    setNoProfile(false);
+    async function fetchNotes() {
+      console.log("fetchNotes called");
+      setLoading(true);
+      setError(null);
+      setNoProfile(false);
+      
+      try {
+        if (!user || !user.principal) {
+          console.log("No authenticated user found");
+          setLoading(false);
+          return;
+        }
     
-    try {
-      // プロファイルの存在を確認
-      console.log("Checking if profile exists...");
-      const profileExists = await checkProfileExists();
-      console.log("Profile exists:", profileExists);
-      
-      if (!profileExists) {
-        console.log("No profile found, setting noProfile to true");
-        setNoProfile(true);
-        setError('プロファイルが見つかりません。プロファイルを作成してください。');
+        // プロファイルの存在を確認
+        console.log("Checking if profile exists...");
+        const profileExists = await checkProfileExists();
+        console.log("Profile exists:", profileExists);
+        
+        if (!profileExists) {
+          console.log("No profile found, setting noProfile to true");
+          setNoProfile(true);
+          setError('プロファイルが見つかりません。プロファイルを作成してください。');
+          setLoading(false);
+          return;
+        }
+    
+        // ユーザー固有のマスターキーを取得
+        const masterKey = getUserMasterKey(user.principal);
+    
+        // 先にノートの存在を確認
+        const actor = await getActor();
+        const noteList = await actor.getNotes();
+        const hasNotes = noteList && noteList.length > 0;
+    
+        // マスターキーがないがノートがある場合
+        if (!masterKey && hasNotes) {
+          console.warn("Master encryption key not found but notes exist!");
+          setNeedDeviceSetup(true);
+          setError('復号化キーが見つかりません。デバイスのセットアップが必要です。');
+          setLoading(false);
+          return;
+        }
+        
+        // ノートを取得 (マスターキーを引数として渡す)
+        console.log("Fetching notes...");
+        const fetchedNotes = hasNotes ? await getNotes(masterKey) : [];
+        
+        console.log("Notes fetched:", fetchedNotes.length);
+        setNotes(fetchedNotes);
+      } catch (err) {
+        console.error('Failed to fetch notes:', err);
+        
+        // プロファイルに関するエラーの特別処理
+        if (err.message === "プロファイルが見つかりません") {
+          console.log("Profile not found error detected");
+          setNoProfile(true);
+          setError('プロファイルが見つかりません。プロファイルを作成してください。');
+        } else {
+          setError('ノートの読み込みに失敗しました: ' + err.message);
+        }
+      } finally {
+        console.log("Setting loading to false");
         setLoading(false);
-        return;
       }
-
-    // マスターキーの有効性をチェック - これを追加
-    const isKeyValid = await checkMasterKeyValid();
-    if (!isKeyValid) {
-      console.log("Master key is invalid or missing");
-      setError('復号化キーが無効または見つかりません。デバイスのセットアップが必要です。');
-      setLoading(false);
-      return;
     }
-
-      // マスターキー存在チェック
-      const masterKey = localStorage.getItem('masterEncryptionKey');
-      if (!masterKey && fetchedNotes.length > 0) {
-        console.warn("Master encryption key not found but notes exist!");
-        setNeedDeviceSetup(true);
-      }
-      
-      console.log("Fetching notes...");
-      const fetchedNotes = await getNotes();
-
-
-      console.log("Notes fetched:", fetchedNotes);
-      setNotes(fetchedNotes);
-    } catch (err) {
-      console.error('Failed to fetch notes:', err);
-      
-      // プロファイルに関するエラーの特別処理
-      if (err.message === "プロファイルが見つかりません") {
-        console.log("Profile not found error detected");
-        setNoProfile(true);
-        setError('プロファイルが見つかりません。プロファイルを作成してください。');
-      } else {
-        setError('ノートの読み込みに失敗しました: ' + err.message);
-      }
-    } finally {
-      console.log("Setting loading to false");
-      setLoading(false);
-    }
-  }
 
   async function setupProfile() {
     console.log("setupProfile called");
@@ -173,6 +181,7 @@ export function NotesProvider({ children }) {
     }
   }
 
+// addNote関数の修正部分
   async function addNote(title, content) {
     console.log("addNote called", { title });
     setLoading(true);
@@ -184,8 +193,14 @@ export function NotesProvider({ children }) {
         return { success: false, error: 'プロファイルが見つかりません。プロファイルを作成してください。' };
       }
       
+      // ユーザー固有のマスターキー取得
+      const masterKey = getUserMasterKey(user.principal);
+      if (!masterKey) {
+        return { success: false, error: '暗号化キーが見つかりません。デバイスのセットアップが必要です。' };
+      }
+      
       console.log("Creating note...");
-      const noteId = await createNote(title, content);
+      const noteId = await createNote(title, content, masterKey);
       console.log("Note created with ID:", noteId);
       
       // 新しいノートをローカル状態に追加
@@ -213,7 +228,13 @@ export function NotesProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      await updateNote(id, title, content);
+      // ユーザー固有のマスターキー取得
+      const masterKey = getUserMasterKey(user.principal);
+      if (!masterKey) {
+        return { success: false, error: '暗号化キーが見つかりません。デバイスのセットアップが必要です。' };
+      }
+      
+      await updateNote(id, title, content, masterKey);
       
       // ノートをローカル状態で更新
       const updatedNotes = notes.map(note => 

@@ -6,13 +6,13 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Login from './pages/Login';
 import Notes from './pages/Notes';
 import GuardiansManagement from './pages/GuardiansManagement';
-import RecoveryProcess from './pages/RecoveryProcess';
 import RecoveryApproval from './pages/RecoveryApproval';
 import Devices from './pages/Devices';
 import './styles.css';
 import GuardianInvitePage from './pages/GuardianInvitePage';
 import DeviceSetupPage from './pages/DeviceSetupPage';
 import DeviceSetupScanner from './components/Device/DeviceSetupScanner';
+import RecoveryProcessPage from './pages/RecoveryProcessPage';
 
 function App() {
   return (
@@ -32,7 +32,7 @@ function App() {
             <Route index element={<Navigate to="/notes" replace />} />
             <Route path="notes" element={<Notes />} />
             <Route path="guardians" element={<GuardiansManagement />} />
-            <Route path="recovery" element={<RecoveryProcess />} />
+            <Route path="recovery" element={<RecoveryProcessPage />} />
             <Route path="approve-recovery" element={<RecoveryApproval />} />
             <Route path="devices" element={<Devices />} />
           </Route>

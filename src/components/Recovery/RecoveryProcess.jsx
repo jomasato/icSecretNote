@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect,useCallback } from 'react';
 import { Principal } from '@dfinity/principal';
 import { 
   initiateRecovery, 
-  getRecoveryStatus, 
+  getRecoveryStatus,
   finalizeRecovery,
-  activateRecoveredAccount 
+  activateRecoveredAccount
 } from '../../services/api';
-import { generateKeyPair } from '../../services/crypto';
+import { combineShares,generateKeyPair } from '../../services/crypto';
+import { saveUserMasterKey } from '../../services/improved-crypto';
 import Loading from '../common/Loading';
 
 function RecoveryProcess() {
@@ -53,12 +54,12 @@ function RecoveryProcess() {
         
         // 最低限1つのデバイスを設定
         if (devicesAvailable.length === 0) {
-          // 新しいデバイスキーを生成してローカルに保存
-          const keyPair = await generateKeyPair();
+          // 新しいデバイスキーを生成
+          const deviceKeyPair = await generateKeyPair();
           
           // 復元されたアカウント用のデバイス情報を保存
           setDevicesAvailable([
-            { name: 'Recovered Device', keyPair, id: Date.now().toString() }
+            { name: 'Recovered Device', keyPair: deviceKeyPair, id: Date.now().toString() }
           ]);
         }
       } else if (result.session.status === 'SharesCollected') {
@@ -152,7 +153,10 @@ function RecoveryProcess() {
       // マスターキーと秘密鍵をローカルに保存
       localStorage.setItem('devicePrivateKey', newDevice.keyPair.privateKey);
       
-      // マスターキーはこの時点でバックエンドによって復元され、新しいデバイスにアクセス権が付与されています
+      // 仮のマスターキー - 実際にはバックエンドから取得または再構築
+      if (status.masterKey) {
+        saveUserMasterKey(userToRecover, status.masterKey);
+      }
       
       // 3秒後にログインページにリダイレクト
       setTimeout(() => {
@@ -327,7 +331,7 @@ function RecoveryProcess() {
             </div>
             <h2 className="ml-3 text-xl font-semibold text-gray-900">
               最終処理中
-              {renderStatusBadge(status?.session?.status)}
+              {status && renderStatusBadge(status.session.status)}
             </h2>
           </div>
           
