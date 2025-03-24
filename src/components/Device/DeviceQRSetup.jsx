@@ -127,7 +127,7 @@ const handleGenerateQR = async (e) => {
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
               className="bg-gray-50 border border-gray-300 text-gray-900 shadow appearance-none rounded w-full py-2 px-3 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="例: マイノートPC、iPhone13"
+              placeholder="例: マイノートPC、iPhone15"
               required
             />
           </div>

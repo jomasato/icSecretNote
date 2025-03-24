@@ -659,13 +659,13 @@ export const addDevice = async (deviceName) => {
     }
     
     // マスターキーを新デバイスの公開鍵で暗号化
-    const encryptedMasterKey = await encryptWithPublicKey(masterKey, deviceKeyPair.publicKey);
-    
-    // キャニスターにデバイスを追加
+    // マスターキーをダミーデータで暗号化するか、空のバイト配列を渡す
+    const encryptedMasterKey = stringToBlob(JSON.stringify({dummy: true}));
+
     const result = await actor.addDevice(
       deviceName, 
-      deviceKeyPair.publicKey, 
-      encryptedMasterKey
+      deviceKeyPair.publicKey,
+      encryptedMasterKey // ダミーデータを渡す
     );
     
     if (result.err) {
@@ -1012,8 +1012,6 @@ export const finalizeRecovery = async (userPrincipal, tempAccessPrincipal, publi
 
 export const setupDeviceLink = async () => {
   try {
-    // ※修正部分※ キーペアの生成と暗号化を削除
-    
     // マスターキーを取得
     const masterKey = localStorage.getItem('masterEncryptionKey');
     const actor = await getActor();
@@ -1021,21 +1019,27 @@ export const setupDeviceLink = async () => {
       throw new Error('マスターキーが見つかりません');
     }
     
-    // ※修正部分※ デバイス登録（キャニスターに変更があれば対応）
-    const deviceName = "新しいデバイス (QR連携)";
-    const deviceKeyPair = await generateKeyPair(); // バックエンド要件で必要な場合
+    // デバイス用の新しいキーペアを生成
+    const deviceKeyPair = await generateKeyPair();
+    
+    // この部分が重要：マスターキーを何らかの形でバックエンドに渡す
+    // 方法1: ダミーデータを渡す場合
+    const encryptedMasterKey = stringToBlob(JSON.stringify({dummy: true}));
+    
+    // 方法2: 実際にマスターキーを暗号化して渡す場合
+    // const encryptedMasterKey = await encryptWithPublicKey(masterKey, deviceKeyPair.publicKey);
     
     const result = await actor.addDevice(
-      deviceName, 
+      "新しいデバイス (QR連携)", 
       deviceKeyPair.publicKey,
-      null // 暗号化されたマスターキーは不要
+      encryptedMasterKey // nullではなく何らかのデータを渡す
     );
     
     if (result.err) {
       throw new Error(result.err || "デバイス追加に失敗しました");
     }
     
-    // ※修正部分※ 連携データにマスターキーを直接含める
+    // 連携データにマスターキーを直接含める
     const linkData = {
       deviceId: result.ok,
       masterKey: masterKey, // マスターキーを直接送信
@@ -1056,25 +1060,66 @@ export const setupDeviceLink = async () => {
   }
 };
 
+// 新デバイス側のprocessDeviceLinkResult関数 - シンプル版
 export const processDeviceLinkResult = async (scanResult) => {
   try {
-    // QRコードからデータを抽出
     const linkData = JSON.parse(atob(scanResult));
     
-    // 有効期限をチェック
     if (Date.now() > linkData.expiresAt) {
       throw new Error("QRコードの有効期限が切れています");
     }
     
-    // ※修正部分※ デバイスIDのみ保存
+    // デバイスIDを保存
     localStorage.setItem('deviceId', linkData.deviceId);
     
-    // ※修正部分※ マスターキーを直接保存
+    // マスターキーをLocalStorageに保存
     localStorage.setItem('masterEncryptionKey', linkData.masterKey);
     
-    return true; // 連携成功
+    // さらにIndexedDBにも保存（永続性のため）
+    try {
+      const db = await openIndexedDB();
+      await saveKeyToIndexedDB(db, 'masterEncryptionKey', linkData.masterKey);
+    } catch (dbError) {
+      console.warn('IndexedDBへの保存に失敗しましたが、LocalStorageには保存されています:', dbError);
+    }
+    
+    return true;
   } catch (error) {
     console.error("QRコード処理エラー:", error);
     throw error;
   }
+};
+
+// IndexedDBを開く補助関数
+const openIndexedDB = () => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('AppStorage', 1);
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('keyStore')) {
+        db.createObjectStore('keyStore', { keyPath: 'id' });
+      }
+    };
+    
+    request.onsuccess = (event) => resolve(event.target.result);
+    request.onerror = (event) => reject(event.target.error);
+  });
+};
+
+// IndexedDBにキーを保存する補助関数
+const saveKeyToIndexedDB = (db, keyName, value) => {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['keyStore'], 'readwrite');
+    const store = transaction.objectStore('keyStore');
+    
+    const request = store.put({
+      id: keyName,
+      value: value,
+      updated: new Date().toISOString()
+    });
+    
+    request.onsuccess = () => resolve();
+    request.onerror = (event) => reject(event.target.error);
+  });
 };
