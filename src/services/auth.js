@@ -1,5 +1,3 @@
-//src/services/auth.js
-
 import { AuthClient } from '@dfinity/auth-client';
 import { Actor, HttpAgent } from '@dfinity/agent';
 import { idlFactory as secureNotesIDL } from '../declarations/secure_notes.js';
@@ -10,13 +8,13 @@ import {
   decryptWithPrivateKey
 } from './crypto';
 import { saveUserMasterKey,getUserMasterKey } from './improved-crypto';
+import { Principal } from '@dfinity/principal';
 
 
 // 定数
 const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
 const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'zkfwe-6yaaa-aaaab-qacca-cai';
 const HOST = process.env.REACT_APP_IC_HOST || 'https://ic0.app';
-
 // 認証クライアントの初期化
 let authClient;
 let secureNotesActor;
@@ -46,20 +44,22 @@ export const isAuthenticated = async () => {
   return await client.isAuthenticated();
 };
 
-// auth.js に追加する関数
 export const initializeNewDevice = async (devicePrivateKey) => {
   try {
     const actor = await getActor();
+    const principal = await getCurrentPrincipal();
     
-    // デバイス情報を取得
-    const profileResult = await actor.getProfile();
-    if (profileResult.err) {
-      throw new Error(profileResult.err);
+    if (!principal) {
+      throw new Error('User principal not found');
     }
     
-    // 暗号化されたマスターキーを取得（この部分の実装がキャニスター側の詳細による）
-    // 最初のデバイス情報からencryptedDeviceDataを取得するか、または
-    // getAccessKey などの専用関数がある場合はそれを使用
+    // 修正: getProfileではなくcheckInheritanceStatusを使用
+    const status = await actor.checkInheritanceStatus(principal);
+    
+    if (!status.exists) {
+      throw new Error('アカウントが見つかりません');
+    }
+    
     const accessKeyResult = await actor.getAccessKey();
     if (accessKeyResult.err) {
       throw new Error(accessKeyResult.err);
@@ -81,6 +81,7 @@ export const initializeNewDevice = async (devicePrivateKey) => {
   }
 };
 
+
 /**
  * ユーザーのプロファイルが存在するかチェック
  * @returns {Promise<boolean>} プロファイルが存在する場合はtrue
@@ -90,25 +91,37 @@ export const checkProfileExists = async () => {
     const actor = await getActor();
     if (!actor) return false;
     
-    const result = await actor.getProfile();
-    return !!result.ok;
-  } catch (error) {
-    // "プロファイルが見つかりません" エラーの場合は存在しない
-    if (error.message === "プロファイルが見つかりません") {
-      return false;
+    // プリンシパルの取得
+    const principal = await getCurrentPrincipal();
+    if (!principal) return false;
+    
+    try {
+      // まず直接プロファイルを取得
+      const profileResult = await actor.getProfile();
+      // エラーがなければプロファイルは存在する
+      return !profileResult.err;
+    } catch (profileError) {
+      // getProfile が失敗した場合、ノート取得を試みる
+      try {
+        // getNotes がエラーを返さなければプロファイルは存在する
+        await actor.getNotes();
+        return true;
+      } catch (notesError) {
+        // エラーメッセージを確認
+        if (notesError.message && notesError.message.includes("プロファイルが見つかりません")) {
+          return false;
+        }
+        // その他のエラーはログに記録して偽を返す
+        console.error("Error checking profile existence:", notesError);
+        return false;
+      }
     }
-    // その他のエラーはコンソールに出力し、念のため存在しないとする
+  } catch (error) {
     console.error('Error checking profile:', error);
     return false;
   }
 };
 
-/**
- * プロファイルを作成
- * @param {string} deviceName - デバイス名
- * @param {Object} deviceKeyPair - デバイスのキーペア
- * @returns {Promise<boolean>} 成功した場合はtrue
- */
 export const createProfile = async (deviceName) => {
   try {
     const actor = await getActor();
@@ -118,20 +131,37 @@ export const createProfile = async (deviceName) => {
       throw new Error('User principal not found. Please login first.');
     }
     
-    // デバイスの公開鍵は引き続き必要（バックエンド側の要件）
+    // デバイスの公開鍵を生成
     const deviceKeyPair = generateKeyPair();
+    const devicePublicKey = deviceKeyPair.publicKey;
     
-    // プロファイル作成
+    // デフォルトのガーディアン数とシェア数
+    const totalGuardians = 3;
+    const requiredShares = 2;
+    
+    console.log("Calling createProfileWithDevice with params:", {
+      totalGuardians,
+      requiredShares,
+      deviceName,
+      devicePublicKeyLength: devicePublicKey ? devicePublicKey.length : 0
+    });
+    
+    // 新しいインターフェースを使用する
     const result = await actor.createProfileWithDevice(
-      5, // totalGuardians
-      3, // requiredShares
-      deviceName || 'Initial Device',
-      deviceKeyPair.publicKey
+      totalGuardians,
+      requiredShares,
+      deviceName,
+      devicePublicKey
     );
     
     if (result.err) {
       throw new Error(`Failed to create profile: ${result.err}`);
     }
+    
+    // デバイスIDを保存
+    const deviceId = result.ok;
+    localStorage.setItem('deviceId', deviceId);
+    localStorage.setItem('devicePrivateKey', deviceKeyPair.privateKey);
     
     // ユーザー固有のマスターキーを生成・保存
     const masterKey = generateEncryptionKey();
@@ -159,7 +189,8 @@ export const login = async () => {
       onSuccess: async () => {
         try {
           const identity = client.getIdentity();
-          const principal = identity.getPrincipal().toString();
+          const principal = identity.getPrincipal();
+          const principalStr = principal.toString();
           const agent = new HttpAgent({ identity, host: HOST });
           
           if (HOST.includes('localhost') || HOST.includes('127.0.0.1')) {
@@ -173,50 +204,49 @@ export const login = async () => {
           });
           
           // デバイスキーペアの生成
-          const deviceKeyPair = await generateKeyPair();
+          const deviceKeyPair = generateKeyPair();
           
           // プロファイルが存在するかチェック
           let isNewUser = false;
           
-          try {
-            // プロファイルの確認
-            const profileResult = await secureNotesActor.getProfile();
+          const profileExists = await checkProfileExists();
+          
+          if (!profileExists) {
+            // 新規ユーザー: プロファイル作成
+            console.log('Profile not found, creating new profile');
+            isNewUser = true;
             
-            if (profileResult.err) {
-              throw new Error(profileResult.err);
+            try {
+              // createProfile関数を正しく呼び出す
+              await createProfile('Initial Device');
+            } catch (createError) {
+              console.warn('Failed to auto-create profile:', createError);
+              // プロファイル作成失敗はユーザーに通知するが、ログインは続行
             }
+          } else {
+            console.log('Existing user, account found');
             
             // 既存ユーザー: デバイスキーを保存
             localStorage.setItem('devicePrivateKey', deviceKeyPair.privateKey);
-            console.log('Existing user, profile found');
+            const legacyMasterKey = localStorage.getItem('masterEncryptionKey');
+            if (legacyMasterKey && !getUserMasterKey(principalStr)) {
+              // 古い形式のマスターキーを新しい形式に移行
+              saveUserMasterKey(principalStr, legacyMasterKey);
+              console.log('Migrated legacy master key to user-specific format');
+            }
             
-            // マスターキーがなければ生成（通常はあるはず）
+            // マスターキーがなければ生成
             if (!localStorage.getItem('masterEncryptionKey')) {
               const masterKey = generateEncryptionKey();
               localStorage.setItem('masterEncryptionKey', masterKey);
             }
-            
-          } catch (profileError) {
-            // エラーメッセージを確認
-            if (profileError.message === "プロファイルが見つかりません") {
-              // 新規ユーザー: プロファイル作成
-              console.log('Profile not found, creating new profile');
-              isNewUser = true;
-              
-              // プロファイル作成
-              await createProfile('Initial Device', deviceKeyPair);
-            } else {
-              // その他のエラー
-              console.error('Error retrieving profile:', profileError);
-              reject(new Error(`Error retrieving profile: ${profileError.message}`));
-              return;
-            }
           }
           
+          // 解決時にはプリンシパル文字列を返す
           resolve({ 
             actor: secureNotesActor, 
             identity,
-            principal,
+            principal: principalStr, // 文字列として返す
             deviceKeyPair,
             isNewUser
           });
@@ -241,9 +271,7 @@ export const logout = async () => {
   const client = await initAuth();
   await client.logout();
   secureNotesActor = null;
-  
-  // ※修正※ マスターキーのみクリア
-  //localStorage.removeItem('masterEncryptionKey');
+
 };
 
 /**
@@ -283,4 +311,77 @@ export const getCurrentPrincipal = async () => {
     return identity.getPrincipal();
   }
   return null;
+};
+
+/**
+ * ユーザープロファイルを取得
+ * @returns {Promise<Object>} プロファイル情報またはエラー
+ */
+export const getProfile = async () => {
+  try {
+    const actor = await getActor();
+    if (!actor) {
+      return { err: 'アクターが初期化されていません' };
+    }
+    
+    // 現在のプリンシパルを取得
+    const principal = await getCurrentPrincipal();
+    if (!principal) {
+      return { err: 'プリンシパルが取得できません' };
+    }
+    
+    // プロファイルの存在確認
+    try {
+      // 直接プロファイルを取得
+      const profileResult = await actor.getProfile();
+      
+      if (profileResult.err) {
+        return { err: profileResult.err };
+      }
+      
+      // デバイス情報も取得（オプション）
+      let devices = [];
+      try {
+        const devicesResult = await actor.getDevices();
+        if (!devicesResult.err) {
+          devices = devicesResult.ok || [];
+        }
+      } catch (deviceErr) {
+        console.warn('デバイス情報取得エラー:', deviceErr);
+      }
+      
+      const profile = profileResult.ok;
+      
+      return {
+        ok: {
+          principal: principal.toString(),
+          totalGuardians: profile.totalGuardians,
+          requiredShares: profile.requiredShares,
+          recoveryEnabled: profile.recoveryEnabled,
+          devices: devices
+        }
+      };
+    } catch (error) {
+      // ノート取得を試みる - プロファイルは存在するがエラーになる場合
+      try {
+        await actor.getNotes();
+        // ノートが取得できればプロファイルは存在する
+        return {
+          ok: {
+            principal: principal.toString(),
+            exists: true,
+            devices: []
+          }
+        };
+      } catch (notesError) {
+        if (notesError.message && notesError.message.includes("プロファイルが見つかりません")) {
+          return { err: 'プロファイルが見つかりません' };
+        }
+        throw notesError;
+      }
+    }
+  } catch (error) {
+    console.error('プロファイル取得エラー:', error);
+    return { err: error.message || 'プロファイル取得に失敗しました' };
+  }
 };

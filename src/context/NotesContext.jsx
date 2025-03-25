@@ -122,57 +122,72 @@ export function NotesProvider({ children }) {
       }
     }
 
-  async function setupProfile() {
-    console.log("setupProfile called");
-    setLoading(true);
-    try {
-      // ※修正部分※ デバイスキーペア関連処理を簡略化
+    async function setupProfile() {
+      console.log("setupProfile called");
+      setLoading(true);
+      setError(null);
       
-      // プロファイルを作成
-      console.log("Creating profile...");
-      await createProfile('Initial Device');
-      
-      // プロファイル作成後にノートを再取得
-      console.log("Profile created successfully");
-      setNoProfile(false);
-      
-      setTimeout(async () => {
+      try {
+        if (!user || !user.principal) {
+          throw new Error('ユーザー情報が見つかりません。再ログインしてください。');
+        }
+        
+        // プロファイルを作成
+        console.log("Creating profile...");
+        await createProfile('Initial Device');
+        
+        // プロファイル作成後に状態を更新
+        console.log("Profile created successfully");
+        setNoProfile(false);
+        
+        // マスターキーが設定されているか確認
+        const masterKey = getUserMasterKey(user.principal);
+        if (!masterKey) {
+          console.error("Master key not set after profile creation");
+          throw new Error('マスターキーの設定に失敗しました');
+        }
+        
+        // 非同期処理を適切に待機 - タイムアウトではなく直接呼び出し
         console.log("Fetching notes after profile creation");
         await fetchNotes();
-      }, 1000);
-      
-      return { success: true };
-    } catch (err) {
-      console.error('Failed to create profile:', err);
-      setError('プロファイルの作成に失敗しました: ' + err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
+        
+        return { success: true };
+      } catch (err) {
+        console.error('Failed to create profile:', err);
+        setError('プロファイルの作成に失敗しました: ' + err.message);
+        return { success: false, error: err.message };
+      } finally {
+        setLoading(false);
+      }
     }
-  }
   
   // マスターキーのチェック関数を修正
   async function checkMasterKeyValid() {
     console.log("Checking if master key is valid");
     
     try {
-      // localStorage からマスターキーを取得
-      const masterKey = localStorage.getItem('masterEncryptionKey');
+      if (!user || !user.principal) {
+        console.log("No user found");
+        return false;
+      }
+      
+      // 正しいユーザー固有のマスターキー取得方法を使用
+      const masterKey = getUserMasterKey(user.principal);
       
       if (!masterKey) {
-        console.log("No master key found");
+        console.log("No master key found for user:", user.principal);
         setNeedDeviceSetup(true);
         return false;
       }
       
       // 基本的な形式チェック
       if (typeof masterKey !== 'string' || masterKey.length < 16) {
-        console.log("Master key is invalid format");
+        console.log("Master key has invalid format");
         setNeedDeviceSetup(true);
         return false;
       }
       
-      console.log("Master key format is valid");
+      console.log("Master key is valid");
       return true;
     } catch (err) {
       console.error("Error checking master key:", err);
@@ -180,6 +195,7 @@ export function NotesProvider({ children }) {
       return false;
     }
   }
+  
 
 // addNote関数の修正部分
   async function addNote(title, content) {
