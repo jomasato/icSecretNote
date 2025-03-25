@@ -5,6 +5,9 @@ import AddGuardian from './AddGuardian';
 import RecoverySetup from '../Recovery/RecoverySetup';
 import GuardianInvitation from './GuardianInvitation.jsx';
 import { useAuth } from '../../context/AuthContext';
+import GuardianContactEditor from './GuardianContactEditor';
+import {selectedGuardian, showEditor,handleSaveGuardian} from './GuardianContactEditor';
+
 
 function GuardiansList() {
   const [guardians, setGuardians] = useState([]);
@@ -16,11 +19,15 @@ function GuardiansList() {
   const [recoveryEnabled, setRecoveryEnabled] = useState(false);
   const [recoveryShares, setRecoveryShares] = useState([]);
   const { user } = useAuth();
+  const [selectedGuardian, setSelectedGuardian] = useState(null);
+  const [showEditor, setShowEditor] = useState(false);
 
   useEffect(() => {
     fetchGuardians();
     checkRecoveryStatus();
   }, []);
+
+  
 
   // リカバリー状態の確認
   const checkRecoveryStatus = () => {
@@ -37,6 +44,20 @@ function GuardiansList() {
         console.error('Failed to parse recovery shares:', err);
       }
     }
+  };
+
+  const handleEditGuardian = (guardian) => {
+    setSelectedGuardian(guardian);
+    setShowEditor(true);
+  };
+  
+  const handleSaveGuardian = (updatedGuardian) => {
+    // 保存成功後の処理（例：リストの更新など）
+    console.log('Updated guardian:', updatedGuardian);
+    // ガーディアンリストを更新
+    fetchGuardians();
+    // エディタを閉じる
+    setShowEditor(false);
   };
 
   const fetchGuardians = async () => {
@@ -308,8 +329,21 @@ function GuardiansList() {
           </div>
         </div>
       )}
+      {showEditor && selectedGuardian && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl">
+            <GuardianContactEditor 
+              guardian={selectedGuardian}
+              onSave={handleSaveGuardian}
+              onCancel={() => setShowEditor(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
 
 export default GuardiansList;

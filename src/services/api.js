@@ -762,7 +762,7 @@ export const activateRecoveredAccount = async (userPrincipal, deviceName, public
   try {
     const actor = await getActor();
     const result = await actor.activateRecoveredAccount(userPrincipal, deviceName, publicKey);
-    return result; // { ok: deviceId } または { err: string }
+    return result; // { ok: deviceId } or { err: string }
   } catch (error) {
     console.error('アカウントリカバリーに失敗:', error);
     return { err: error.message };
@@ -914,24 +914,35 @@ export const verifyInvitationToken = async (token, principalId) => {
  */
 export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
   try {
-    // トークンの検証
+    // トークン検証（既存コード）
     const verification = await verifyInvitationToken(token, inviterPrincipal);
     if (!verification.valid) {
       throw new Error(verification.error);
     }
     
-    // ここでバックエンドAPIを呼び出して、ガーディアンとして登録する処理を行います
-    // このモック実装では、成功を返します
+    // キャニスター呼び出しを追加 - manageGuardian API を呼び出す
+    const actor = await getActor();
     
-    return {
-      success: true
-    };
+    // キャニスターにガーディアン登録する
+    // 注意: この関数はmain.moに実装必要
+    const result = await actor.manageGuardian(
+      inviterPrincipal,
+      { Add: null },     // Add アクション
+      null,              // 暗号化データ (不要)
+      JSON.stringify({   // メタデータとして連絡先情報を保存
+        acceptedAt: Date.now(),
+        acceptedBy: await getCurrentPrincipal()
+      })
+    );
+    
+    if (result.err) {
+      throw new Error(result.err);
+    }
+    
+    return { success: true };
   } catch (err) {
     console.error('Failed to accept guardian invitation:', err);
-    return {
-      success: false,
-      error: err.message || '招待の受け入れに失敗しました'
-    };
+    return { success: false, error: err.message };
   }
 };
 
@@ -939,35 +950,34 @@ export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
  * 保留中のリカバリーリクエストを取得
  * @returns {Promise<Array>} リカバリーリクエストの配列
  */
+/**
+ * 保留中のリカバリーリクエストを取得
+ * @returns {Promise<Array>} リカバリーリクエストの配列
+ */
+/**
+ * 保留中のリカバリーリクエストを取得
+ * @returns {Promise<Array>} リカバリーリクエストの配列
+ */
 export const getPendingRecoveryRequests = async () => {
   try {
-    // この実装はモックバージョンです。実際のアプリでは、バックエンドからデータを取得します。
-    // ガーディアンとしての保留中のリクエストを取得する
+    const actor = await getActor();
     
-    // モックデータの作成 (開発用)
-    const mockRequests = [
-      {
-        id: `request-${Date.now()}-1`,
-        principal: 'w3gef-eqllq-abcde-12345-xyz',
-        userName: 'ユーザー1',
-        requestTime: Date.now() - 3600000, // 1時間前
-        deviceLost: true,
-        shareId: 'share-123'
-      },
-      {
-        id: `request-${Date.now()}-2`,
-        principal: 'a2b3c-dq4rs-vw7yz-98765-abc',
-        userName: 'ユーザー2',
-        requestTime: Date.now() - 7200000, // 2時間前
-        deviceLost: false,
-        shareId: 'share-456'
-      }
-    ];
+    // 新しい関数を使用して承認待ちリストを取得
+    const pendingSessions = await actor.getPendingGuardianApprovals();
     
-    return mockRequests;
-  } catch (err) {
-    console.error('Failed to get pending recovery requests:', err);
-    throw new Error('リカバリーリクエストの取得に失敗しました');
+    // フロントエンド表示用に変換
+    return pendingSessions.map(session => ({
+      id: `request-${session.principal.toString()}`,
+      principal: session.principal.toString(),
+      userName: session.userName || '',
+      requestTime: Number(session.requestTime),
+      deviceLost: session.deviceLost,
+      requestedBy: session.requestedBy.toString(),
+      reason: session.reason || ''
+    }));
+  } catch (error) {
+    console.error('Failed to get recovery requests:', error);
+    throw error;
   }
 };
 
@@ -1102,4 +1112,140 @@ const saveKeyToIndexedDB = (db, keyName, value) => {
     request.onsuccess = () => resolve();
     request.onerror = (event) => reject(event.target.error);
   });
+};
+
+// 新機能: 相続プロセス開始のAPI
+export const requestInheritanceTransfer = async (accountId, reason) => {
+  try {
+    const actor = await getActor();
+    // バックエンド関数を呼び出し
+    const result = await actor.initiateRecovery(accountId);
+    
+    if (result.err) {
+      throw new Error(result.err);
+    }
+    
+    // ローカルに理由を記録（オプション）
+    localStorage.setItem(`inheritance_reason_${accountId}`, reason);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('相続リクエスト失敗:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * ガーディアン情報を更新
+ * @param {string} guardianPrincipal - ガーディアンのプリンシパルID
+ * @param {Object} info - 更新するガーディアン情報
+ * @returns {Promise<Object>} 更新結果
+ */
+export const updateGuardianInfo = async (guardianPrincipal, info) => {
+  try {
+    const actor = await getActor();
+    
+    // 連絡先情報をJSON形式で保存
+    const contactInfo = JSON.stringify({
+      email: info.email || '',
+      phone: info.phone || '',
+      relationship: info.relationship || '',
+      isEmergency: info.isEmergency || false,
+      notes: info.notes || ''
+    });
+    
+    // キャニスター側の関数を呼び出し
+    const result = await actor.manageGuardian(
+      guardianPrincipal,
+      { Replace: null },  // 更新アクション
+      null,               // 暗号化シェアデータ (不要)
+      contactInfo         // 連絡先情報
+    );
+    
+    if (result.err) {
+      throw new Error(result.err);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update guardian info:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * ガーディアン情報を取得
+ * @param {string} guardianPrincipal - ガーディアンのプリンシパルID
+ * @returns {Promise<Object>} ガーディアン情報
+ */
+export const getGuardianInfo = async (guardianPrincipal) => {
+  try {
+    const actor = await getActor();
+    
+    // ガーディアンリストから該当するガーディアンを検索
+    const guardians = await getGuardians();
+    const guardian = guardians.find(g => g.principal === guardianPrincipal);
+    
+    if (!guardian) {
+      return { success: false, error: 'ガーディアン情報が見つかりません' };
+    }
+    
+    // 保存された連絡先情報を取得
+    const myKeyShare = await actor.getMyKeyShare(guardianPrincipal);
+    
+    // 連絡先情報をパース
+    let contactInfo = {};
+    if (myKeyShare.ok && myKeyShare.ok.metadata) {
+      try {
+        contactInfo = JSON.parse(myKeyShare.ok.metadata);
+      } catch (e) {
+        console.warn('Failed to parse contact info:', e);
+      }
+    }
+    
+    return {
+      success: true,
+      data: {
+        principal: guardianPrincipal,
+        name: contactInfo.name || '',
+        email: contactInfo.email || '',
+        phone: contactInfo.phone || '',
+        relationship: contactInfo.relationship || '',
+        isEmergency: contactInfo.isEmergency || false,
+        notes: contactInfo.notes || '',
+        approved: guardian.approved || false
+      }
+    };
+  } catch (error) {
+    console.error('Failed to get guardian info:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * 相続状態の確認
+ * @param {string} accountId - ユーザーのプリンシパルID
+ * @returns {Promise<Object>} 相続状態情報
+ */
+export const getInheritanceStatus = async (accountId) => {
+  try {
+    const actor = await getActor();
+    
+    // この関数はmain.moに既に存在する
+    const result = await actor.checkInheritanceStatus(accountId);
+    
+    return {
+      success: true,
+      data: {
+        exists: result.exists,
+        configured: result.configured,
+        transferred: result.transferred,
+        currentApprovals: result.currentApprovals,
+        requiredApprovals: result.requiredApprovals
+      }
+    };
+  } catch (error) {
+    console.error('Failed to get inheritance status:', error);
+    return { success: false, error: error.message };
+  }
 };
