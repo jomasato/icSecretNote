@@ -12,8 +12,7 @@ import { Principal } from '@dfinity/principal';
 
 
 // 定数
-const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'mexqz-aqaaa-aaaab-qabtq-cai';
+const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'ppqm6-zyaaa-aaaah-arcpq-cai';
 const HOST = process.env.REACT_APP_IC_HOST || 'https://ic0.app';
 // 認証クライアントの初期化
 let authClient;
