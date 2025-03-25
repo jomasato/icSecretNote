@@ -36,77 +36,63 @@ actor DigitalInheritance {
   };
 
   // ガーディアン連絡先情報を保存するための型定義
-  type GuardianContactInfo = {
+    type GuardianContactInfo = {
     name: ?Text;
     contactInfo: ?Text;  // JSON形式で保存（email, phone, relationship等）
     lastUpdated: Int;    // 最終更新タイムスタンプ
-  };
+    };
+// 既存のシェア情報を拡張
+type KeyShare = {
+  shareId: Text;
+  encryptedShare: Blob;
+  guardianPrincipal: Principal;
+  userPrincipal: Principal;
+  metadata: ?Text;     // メタデータを追加（作成日時、説明など）
+};
 
-  // ガーディアン操作のアクション型定義（追加した部分）
-  type GuardianAction = {
-    #Add;
-    #Remove;
-    #Replace: (Principal);
-  };
-
-  // 結果型の定義（追加した部分）
-  type Result<T> = {
-    #ok: T;
-    #err: Text;
-  };
-
-  // 既存のシェア情報を拡張
-  type KeyShare = {
-    shareId: Text;
-    encryptedShare: Blob;
-    guardianPrincipal: Principal;
-    userPrincipal: Principal;
-    metadata: ?Text;     // メタデータを追加（作成日時、説明など）
-  };
-
-  // 相続リクエストの詳細情報
-  type RecoverySessionInfo = {
-    principal: Principal;  // ユーザープリンシパル
-    userName: ?Text;       // ユーザー名（オプション）
-    requestTime: Int;      // リクエスト時間
-    deviceLost: Bool;      // デバイス紛失フラグ
-    reason: ?Text;         // 相続理由（オプション）
-    requestedBy: Principal; // リクエスト元
-  };
+// 相続リクエストの詳細情報
+type RecoverySessionInfo = {
+  principal: Principal;  // ユーザープリンシパル
+  userName: ?Text;       // ユーザー名（オプション）
+  requestTime: Int;      // リクエスト時間
+  deviceLost: Bool;      // デバイス紛失フラグ
+  reason: ?Text;         // 相続理由（オプション）
+  requestedBy: Principal; // リクエスト元
+};
 
   // ユーザーデータのストレージ (Principal -> AccountData)
   private stable var accountEntries : [(Principal, AccountData)] = [];
   private var accounts = HashMap.HashMap<Principal, AccountData>(10, Principal.equal, Principal.hash);
 
-  // ガーディアン情報を保存するハッシュマップ
-  private stable var guardianInfoEntries : [(Principal, GuardianContactInfo)] = [];
-  private var guardianInfoMap = HashMap.HashMap<Principal, GuardianContactInfo>(10, Principal.equal, Principal.hash);
+// ガーディアン情報を保存するハッシュマップ
+private stable var guardianInfoEntries : [(Principal, GuardianContactInfo)] = [];
+private var guardianInfoMap = HashMap.HashMap<Principal, GuardianContactInfo>(10, Principal.equal, Principal.hash);
 
-  // 相続セッション情報を保存するハッシュマップ
-  private stable var recoverySessionEntries : [(Principal, RecoverySessionInfo)] = [];
-  private var recoverySessions = HashMap.HashMap<Principal, RecoverySessionInfo>(10, Principal.equal, Principal.hash);
+// 相続セッション情報を保存するハッシュマップ
+private stable var recoverySessionEntries : [(Principal, RecoverySessionInfo)] = [];
+private var recoverySessions = HashMap.HashMap<Principal, RecoverySessionInfo>(10, Principal.equal, Principal.hash);
 
-  // アップグレード処理を拡張
-  system func preupgrade() {
-    accountEntries := Iter.toArray(accounts.entries());
-    guardianInfoEntries := Iter.toArray(guardianInfoMap.entries());
-    recoverySessionEntries := Iter.toArray(recoverySessions.entries());
-  };
+// アップグレード処理を拡張
+system func preupgrade() {
+  accountEntries := Iter.toArray(accounts.entries());
+  guardianInfoEntries := Iter.toArray(guardianInfoMap.entries());
+  recoverySessionEntries := Iter.toArray(recoverySessions.entries());
+};
 
-  system func postupgrade() {
-    accounts := HashMap.fromIter<Principal, AccountData>(
-      Iter.fromArray(accountEntries), 10, Principal.equal, Principal.hash
-    );
-    guardianInfoMap := HashMap.fromIter<Principal, GuardianContactInfo>(
-      Iter.fromArray(guardianInfoEntries), 10, Principal.equal, Principal.hash
-    );
-    recoverySessions := HashMap.fromIter<Principal, RecoverySessionInfo>(
-      Iter.fromArray(recoverySessionEntries), 10, Principal.equal, Principal.hash
-    );
-    accountEntries := [];
-    guardianInfoEntries := [];
-    recoverySessionEntries := [];
-  };
+system func postupgrade() {
+  accounts := HashMap.fromIter<Principal, AccountData>(
+    Iter.fromArray(accountEntries), 10, Principal.equal, Principal.hash
+  );
+  guardianInfoMap := HashMap.fromIter<Principal, GuardianContactInfo>(
+    Iter.fromArray(guardianInfoEntries), 10, Principal.equal, Principal.hash
+  );
+  recoverySessions := HashMap.fromIter<Principal, RecoverySessionInfo>(
+    Iter.fromArray(recoverySessionEntries), 10, Principal.equal, Principal.hash
+  );
+  accountEntries := [];
+  guardianInfoEntries := [];
+  recoverySessionEntries := [];
+};
 
   // =================== アカウント・メモ管理機能 =================== 
 
@@ -172,65 +158,65 @@ actor DigitalInheritance {
   // =================== 相続設定機能 =================== 
 
   // ガーディアン管理関数の拡張
-  public shared(msg) func manageGuardian(
+    public shared(msg) func manageGuardian(
     guardianId: Principal,
     action: GuardianAction,
     encryptedShare: ?Blob,
     contactInfo: ?Text
-  ) : async Result<()> {
+    ) : async Result<()> {
     let caller = msg.caller;
     
     switch (accounts.get(caller)) {
-      case (null) { return #err("アカウントが見つかりません") };
-      case (?account) {
+        case (null) { return #err("アカウントが見つかりません") };
+        case (?account) {
         switch (action) {
-          case (#Add) {
+            case (#Add) {
             // 既存のガーディアン追加ロジック
             
             // 連絡先情報がある場合は保存
             if (Option.isSome(contactInfo)) {
-              guardianInfoMap.put(guardianId, {
+                guardianInfoMap.put(guardianId, {
                 name = null;
                 contactInfo = contactInfo;
                 lastUpdated = Time.now();
-              });
+                });
             };
             
             return #ok();
-          };
-          
-          case (#Remove) {
+            };
+            
+            case (#Remove) {
             // 既存のガーディアン削除ロジック
             
             // ガーディアン情報も削除
             guardianInfoMap.delete(guardianId);
             
             return #ok();
-          };
-          
-          case (#Replace(newGuardian)) {
+            };
+            
+            case (#Replace(newGuardian)) {
             // 既存のガーディアン置換ロジック
             
             // 連絡先情報を更新
             if (Option.isSome(contactInfo)) {
-              guardianInfoMap.put(guardianId, {
+                guardianInfoMap.put(guardianId, {
                 name = null;
                 contactInfo = contactInfo;
                 lastUpdated = Time.now();
-              });
+                });
             };
             
             return #ok();
-          };
+            };
         };
-      };
+        };
     };
-  };
+    };
 
-  // ガーディアン情報の取得
-  public query func getGuardianContactInfo(guardianId: Principal) : async ?GuardianContactInfo {
+    // ガーディアン情報の取得
+    public query func getGuardianContactInfo(guardianId: Principal) : async ?GuardianContactInfo {
     return guardianInfoMap.get(guardianId);
-  };
+    };
 
   // 相続設定の登録・更新
   public shared(msg) func setInheritanceConfig(
@@ -281,47 +267,97 @@ actor DigitalInheritance {
   };
 
   // シェアIDとメタデータを関連付ける
-  public shared(msg) func storeKeyShare(
-    shareId: Text,
-    encryptedShareData: Blob,  // 空でも可（クライアント側で保存）
-    ownerPrincipal: Principal
-  ) : async Result<()> {
-    let caller = msg.caller;
-    
-    // 呼び出し者が有効なユーザーかチェック
-    switch (accounts.get(caller)) {
-      case (null) { return #err("アカウントが見つかりません") };
-      case (?account) {
-        // シェア情報を保存（実際のシェアデータはクライアント側）
-        // 実装方法に応じて詳細設計
-        
-        return #ok();
-      };
+public shared(msg) func storeKeyShare(
+  shareId: Text,
+  encryptedShareData: Blob,  // 空でも可（クライアント側で保存）
+  ownerPrincipal: Principal
+) : async Result<()> {
+  let caller = msg.caller;
+  
+  // 呼び出し者が有効なユーザーかチェック
+  switch (accounts.get(caller)) {
+    case (null) { return #err("アカウントが見つかりません") };
+    case (?account) {
+      // シェア情報を保存（実際のシェアデータはクライアント側）
+      // 実装方法に応じて詳細設計
+      
+      return #ok();
     };
   };
+};
 
-  // シェア情報の取得を拡張（メタデータ含む）
-  public query func getMyKeyShare(ownerPrincipal: Principal) : async Result<KeyShare> {
-    // 既存の実装を拡張し、メタデータも返す
-    // 実装方法に応じて詳細設計
-    
-    return #err("未実装");
-  };
+// シェア情報の取得を拡張（メタデータ含む）
+public query func getMyKeyShare(ownerPrincipal: Principal) : async Result<KeyShare> {
+  // 既存の実装を拡張し、メタデータも返す
+  // 実装方法に応じて詳細設計
+  
+  return #err("未実装");
+};
 
   // =================== 相続プロセス機能 =================== 
 
   // 相続リクエスト開始（ガーディアンが呼び出し）
-  public shared(msg) func requestInheritanceTransfer(
-    accountId: Principal,
-    reason: ?Text
-  ) : async Result<()> {
-    let caller = msg.caller;
-    
-    switch (accounts.get(accountId)) {
-      case (null) { return #err("アカウントが見つかりません") };
+public shared(msg) func requestInheritanceTransfer(
+  accountId: Principal,
+  reason: ?Text
+) : async Result<()> {
+  let caller = msg.caller;
+  
+  switch (accounts.get(accountId)) {
+    case (null) { return #err("アカウントが見つかりません") };
+    case (?account) {
+      switch (account.inheritanceConfig) {
+        case (null) { return #err("相続設定が存在しません") };
+        case (?config) {
+          // 呼び出し者がガーディアンかどうか確認
+          let isGuardian = Array.find<Principal>(
+            config.guardians, 
+            func(p) { Principal.equal(p, caller) }
+          );
+          
+          if (Option.isNull(isGuardian)) {
+            return #err("あなたはこのアカウントのガーディアンではありません");
+          };
+          
+          // 相続リクエストを保存
+          let sessionInfo : RecoverySessionInfo = {
+            principal = accountId;
+            userName = null; // ユーザー名はバックエンドで管理していないため
+            requestTime = Time.now();
+            deviceLost = true; // デフォルト値
+            reason = reason;
+            requestedBy = caller;
+          };
+          
+          recoverySessions.put(accountId, sessionInfo);
+          
+          // 相続プロセスを開始（approveInheritanceの準備）
+          // 既存のapproveInheritance関数と連携
+          
+          return #ok();
+        };
+      };
+    };
+  };
+};
+
+// 保留中の相続リクエスト情報取得
+public query func getRecoverySessionInfo(userPrincipal: Principal) : async ?RecoverySessionInfo {
+  return recoverySessions.get(userPrincipal);
+};
+
+// 相続リクエスト一覧の取得（自分が承認すべきリクエスト）
+public query(msg) func getPendingGuardianApprovals() : async [RecoverySessionInfo] {
+  let caller = msg.caller;
+  let pending : [RecoverySessionInfo] = [];
+  
+  // すべての相続セッションをチェック
+  for ((principal, session) in recoverySessions.entries()) {
+    switch (accounts.get(principal)) {
+      case (null) { /* アカウントが存在しない場合はスキップ */ };
       case (?account) {
         switch (account.inheritanceConfig) {
-          case (null) { return #err("相続設定が存在しません") };
+          case (null) { /* 相続設定がない場合はスキップ */ };
           case (?config) {
             // 呼び出し者がガーディアンかどうか確認
             let isGuardian = Array.find<Principal>(
@@ -329,75 +365,25 @@ actor DigitalInheritance {
               func(p) { Principal.equal(p, caller) }
             );
             
-            if (Option.isNull(isGuardian)) {
-              return #err("あなたはこのアカウントのガーディアンではありません");
-            };
-            
-            // 相続リクエストを保存
-            let sessionInfo : RecoverySessionInfo = {
-              principal = accountId;
-              userName = null; // ユーザー名はバックエンドで管理していないため
-              requestTime = Time.now();
-              deviceLost = true; // デフォルト値
-              reason = reason;
-              requestedBy = caller;
-            };
-            
-            recoverySessions.put(accountId, sessionInfo);
-            
-            // 相続プロセスを開始（approveInheritanceの準備）
-            // 既存のapproveInheritance関数と連携
-            
-            return #ok();
-          };
-        };
-      };
-    };
-  };
-
-  // 保留中の相続リクエスト情報取得
-  public query func getRecoverySessionInfo(userPrincipal: Principal) : async ?RecoverySessionInfo {
-    return recoverySessions.get(userPrincipal);
-  };
-
-  // 相続リクエスト一覧の取得（自分が承認すべきリクエスト）
-  public query(msg) func getPendingGuardianApprovals() : async [RecoverySessionInfo] {
-    let caller = msg.caller;
-    var pending : [RecoverySessionInfo] = [];
-    
-    // すべての相続セッションをチェック
-    for ((principal, session) in recoverySessions.entries()) {
-      switch (accounts.get(principal)) {
-        case (null) { /* アカウントが存在しない場合はスキップ */ };
-        case (?account) {
-          switch (account.inheritanceConfig) {
-            case (null) { /* 相続設定がない場合はスキップ */ };
-            case (?config) {
-              // 呼び出し者がガーディアンかどうか確認
-              let isGuardian = Array.find<Principal>(
-                config.guardians, 
+            // このユーザーがガーディアンで、まだ承認していない場合
+            if (Option.isSome(isGuardian)) {
+              let alreadyApproved = Array.find<Principal>(
+                config.approvals, 
                 func(p) { Principal.equal(p, caller) }
               );
               
-              // このユーザーがガーディアンで、まだ承認していない場合
-              if (Option.isSome(isGuardian)) {
-                let alreadyApproved = Array.find<Principal>(
-                  config.approvals, 
-                  func(p) { Principal.equal(p, caller) }
-                );
-                
-                if (Option.isNull(alreadyApproved) and not config.isTransferred) {
-                  pending := Array.append<RecoverySessionInfo>(pending, [session]);
-                };
+              if (Option.isNull(alreadyApproved) and not config.isTransferred) {
+                pending := Array.append<RecoverySessionInfo>(pending, [session]);
               };
             };
           };
         };
       };
     };
-    
-    return pending;
   };
+  
+  return pending;
+};
 
   // ガーディアンによる合意登録
   public shared(msg) func approveInheritance(accountId: Principal) : async Bool {
