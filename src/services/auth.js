@@ -14,7 +14,7 @@ import { saveUserMasterKey,getUserMasterKey } from './improved-crypto';
 
 // 定数
 const II_CANISTER_ID = process.env.REACT_APP_II_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'l6ye3-oqaaa-aaaao-qj52a-cai';
+const NOTES_CANISTER_ID = process.env.REACT_APP_NOTES_CANISTER_ID || 'zkfwe-6yaaa-aaaab-qacca-cai';
 const HOST = process.env.REACT_APP_IC_HOST || 'https://ic0.app';
 
 // 認証クライアントの初期化

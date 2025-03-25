@@ -13,6 +13,7 @@ import GuardianInvitePage from './pages/GuardianInvitePage';
 import DeviceSetupPage from './pages/DeviceSetupPage';
 import DeviceSetupScanner from './components/Device/DeviceSetupScanner';
 import RecoveryProcessPage from './pages/RecoveryProcessPage';
+import InheritanceRequestPage  from './pages/InheritanceRequestPage';
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
           <Route path="/link-device" element={<ProtectedRoute> <DeviceSetupScanner /> </ProtectedRoute>}/>
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="GuardianInvitePage" element={<GuardianInvitePage />} />
+          <Route path="InheritanceRequestPage" element={<InheritanceRequestPage />} />
         </Routes>
       </Router>
     </AuthProvider>

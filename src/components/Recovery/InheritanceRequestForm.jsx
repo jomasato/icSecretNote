@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { requestInheritanceTransfer } from '../../services/api';
 
+/**
+ * 相続プロセスを開始するためのフォームコンポーネント
+ * @param {object} props - プロパティ
+ * @param {string} props.userPrincipal - 対象ユーザーのプリンシパルID
+ */
 function InheritanceRequestForm({ userPrincipal }) {
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState(false);
