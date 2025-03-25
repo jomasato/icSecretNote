@@ -434,7 +434,7 @@ const GF256 = {
  * @returns {number} f(0)の値
  */
 const lagrangeInterpolation = (points) => {
-    console.log('ラグランジュ補間開始 - ポイント:', JSON.stringify(points));
+
     
     if (points.length === 0) {
       throw new Error('ポイントが必要です');
@@ -445,7 +445,7 @@ const lagrangeInterpolation = (points) => {
     
     for (let i = 0; i < points.length; i++) {
       const [xi, yi] = points[i];
-      console.log(`ポイント[${i}]: (${xi}, ${yi})`);
+
       
       // このポイントのラグランジュ基底多項式の値を計算
       let basis = 1;
@@ -467,24 +467,24 @@ const lagrangeInterpolation = (points) => {
         
         // 除算
         const term = GF256.div(num, denom);
-        console.log(`  j=${j}: xj=${xj}, 分子=${num}, 分母=${denom}, 項=${term}`);
+
         
         // 基底多項式に掛ける
         basis = GF256.mul(basis, term);
       }
       
-      console.log(`  基底多項式 L_${i}(0) = ${basis}`);
+
       
       // yi * Li(0)
       const term = GF256.mul(yi, basis);
-      console.log(`  項の寄与: ${yi} * ${basis} = ${term}`);
+
       
       // 累積結果に加算
       result = GF256.add(result, term);
-      console.log(`  現在の結果: ${result}`);
+
     }
     
-    console.log(`最終結果: ${result}`);
+
     return result;
   };
   
@@ -520,7 +520,7 @@ export const createShares = (secret, totalShares, threshold) => {
     
     // 秘密情報をバイト配列に変換
     const secretBytes = new TextEncoder().encode(secret);
-    console.log('秘密のバイト配列:', Array.from(secretBytes));
+
     
     // エンコーディング情報の保存（復元時に必要）
     const encoding = 'utf-8';
@@ -539,13 +539,13 @@ export const createShares = (secret, totalShares, threshold) => {
       // a_1からa_{t-1}は乱数
       window.crypto.getRandomValues(coeffs.subarray(1));
       
-      console.log(`バイトインデックス ${byteIndex}, 元の値: ${secretBytes[byteIndex]}, 係数:`, Array.from(coeffs));
+
       
       // 各参加者にシェアを生成
       for (let x = 1; x <= totalShares; x++) {
         // インデックスは1から始まる
         const y = evaluatePolynomial(coeffs, x);
-        console.log(`参加者 ${x}, バイト ${byteIndex}, 多項式結果: ${y}`);
+
         
         if (shares[x - 1] === undefined) {
           shares[x - 1] = {
@@ -565,7 +565,7 @@ export const createShares = (secret, totalShares, threshold) => {
       
       // yはUint8Arrayに変換してから16進数にエンコード
       const yHex = bytesToHex(new Uint8Array(share.y));
-      console.log(`シェアID: share-${share.x}, X: ${xHex}, Y(Hex): ${yHex}`);
+
       
       // プレフィックス(80)を追加 - オリジナルライブラリとの互換性のため
       return {
@@ -592,11 +592,11 @@ export const combineShares = (shares) => {
   try {
     // シェアの値だけを抽出
     const shareValues = shares.map(share => share.value || share);
-    console.log('シェア値:', shareValues);
+
     
     // エンコーディング情報を取得（最初のシェアから）
     const encoding = shares[0].encoding || 'utf-8';
-    console.log('使用するエンコーディング:', encoding);
+
     
     // シェアをデコード
     const decodedShares = shareValues.map(shareValue => {
@@ -616,7 +616,7 @@ export const combineShares = (shares) => {
       };
     });
     
-    console.log('デコードされたシェア:', JSON.stringify(decodedShares));
+
     
     // シェアの有効性チェック
     if (decodedShares.length === 0) {
@@ -635,7 +635,7 @@ export const combineShares = (shares) => {
     
     // 結果のバイト配列
     const result = new Uint8Array(secretLength);
-    console.log('初期化された結果バイト配列:', result);
+
     
     // バイトごとに復元
     for (let byteIndex = 0; byteIndex < secretLength; byteIndex++) {
@@ -646,22 +646,22 @@ export const combineShares = (shares) => {
       ]);
       
       // ポイントをログ
-      console.log(`バイト ${byteIndex}, ポイント:`, JSON.stringify(points));
+
       
       // ラグランジュ補間法でf(0)を求める
       result[byteIndex] = lagrangeInterpolation(points);
       
       // 結果をログ
-      console.log(`バイト ${byteIndex}, 補間結果: ${result[byteIndex]}`);
+
     }
     
     // 復元されたバイト配列をログ出力
-    console.log('復元されたバイト配列:', Array.from(result).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
     
     try {
       // バイト配列を文字列に変換
       const decoded = new TextDecoder(encoding).decode(result);
-      console.log('デコード結果:', decoded);
+
       return decoded;
     } catch (decodeError) {
       console.error('TextDecoderでのデコードに失敗:', decodeError);
@@ -1094,7 +1094,7 @@ export const retrieveEncryptionKeySecurely = async (password) => {
         return null;
       }
       
-      console.log('取得したセキュアデータ:', secureData);
+
       
       // secureData.saltが存在するか確認
       if (!secureData.salt) {
@@ -1186,8 +1186,6 @@ export const retrieveEncryptionKeySecurely = async (password) => {
 export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShares) => {
   // シェアを作成
   const shares = createShares(encryptionKey, totalGuardians, requiredShares);
-  console.log('生成されたシェア数:', shares.length);
-  console.log('生成されたシェアのサンプル:', shares[0]); // 最初のシェアの内容を表示
   
   // 公開リカバリーデータ
   const publicRecoveryData = {
@@ -1198,7 +1196,7 @@ export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShar
     algorithm: 'shamir-secret-sharing',
     library: 'custom-implementation'
   };
-  console.log('公開リカバリーデータ:', publicRecoveryData);
+
   
   // バイト配列に変換
   const publicDataBytes = new TextEncoder().encode(
@@ -1214,34 +1212,34 @@ export const generateRecoveryData = (encryptionKey, totalGuardians, requiredShar
 // テスト関数
 function testSimple() {
     // 基本演算のテスト
-    console.log("--- GF(256)基本演算テスト ---");
-    console.log("加算: 3 + 7 =", GF256.add(3, 7));
-    console.log("乗算: 3 * 7 =", GF256.mul(3, 7));
-    console.log("除算: 21 / 7 =", GF256.div(21, 7));
+
+
+
+
     
     // 逆元テスト
-    console.log("\n--- 逆元テスト ---");
+
     for (let i = 1; i <= 5; i++) {
       const inv = GF256.inverse(i);
-      console.log(`${i}の逆元 = ${inv}, 検証: ${i} * ${inv} = ${GF256.mul(i, inv)}`);
+
     }
     
     // シャミア分散法テスト
-    console.log("\n--- シャミア秘密分散テスト ---");
+
     // シンプルな秘密（'A'のASCIIコード = 65）
     const secret = "A";
     // シェアを作成
     const shares = createShares(secret, 5, 3);
-    console.log("作成されたシェア:", shares);
+
     
     // シェアから秘密を復元
     const recovered = combineShares(shares.slice(0, 3));
-    console.log("復元された秘密:", recovered);
+
     
     return recovered === secret;
   }
 
-  console.log("テスト結果:", testSimple() ? "成功" : "失敗");
+
 
   /**
  * ユーザー固有のマスターキーを保存
@@ -1256,7 +1254,7 @@ export const saveUserMasterKey = (principal, masterKey) => {
   }
   const keyName = `${principal}_masterEncryptionKey`;
   localStorage.setItem(keyName, masterKey);
-  console.log(`Saved master key for user: ${principal.substring(0, 8)}...`);
+
   return true;
 };
 
@@ -1277,7 +1275,7 @@ export const getUserMasterKey = (principal) => {
   if (!key && principal) {
     const legacyKey = localStorage.getItem('masterEncryptionKey');
     if (legacyKey) {
-      console.log('Found legacy master key, migrating to user-specific format');
+
       saveUserMasterKey(principal, legacyKey);
       return legacyKey;
     }
