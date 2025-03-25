@@ -15,8 +15,10 @@ import {
 import { 
   encryptWithKey as improvedEncrypt,
   decryptWithKey as improvedDecrypt,
-  getUserMasterKey
+  getUserMasterKey,
+  saveUserMasterKey
  } from './improved-crypto';
+ import { Principal } from '@dfinity/principal';
 
 //------------------------------------------------
 // ガーディアンの公開鍵管理
@@ -506,6 +508,16 @@ export const setupRecovery = async (totalGuardians, requiredShares, masterKey) =
   }
 };
 
+const toPrincipal = (principalStr) => {
+  try {
+    return Principal.fromText(principalStr);
+  } catch (error) {
+    console.error('Invalid principal format:', error);
+    throw new Error(`Invalid principal format: ${principalStr}`);
+  }
+};
+
+
 /**
  * リカバリーを開始
  * @param {string} userPrincipal - ユーザーのプリンシパルID
@@ -514,7 +526,9 @@ export const setupRecovery = async (totalGuardians, requiredShares, masterKey) =
 export const initiateRecovery = async (userPrincipal) => {
   try {
     const actor = await getActor();
-    const result = await actor.initiateRecovery(userPrincipal);
+    const principal = toPrincipal(userPrincipal);
+    
+    const result = await actor.initiateRecovery(principal);
     
     if (result.err) {
       throw new Error(result.err);
@@ -535,7 +549,9 @@ export const initiateRecovery = async (userPrincipal) => {
 export const approveRecovery = async (userPrincipal) => {
   try {
     const actor = await getActor();
-    const result = await actor.approveRecovery(userPrincipal);
+    const principal = toPrincipal(userPrincipal);
+    
+    const result = await actor.approveRecovery(principal);
     
     if (result.err) {
       throw new Error(result.err);
@@ -557,7 +573,9 @@ export const approveRecovery = async (userPrincipal) => {
 export const submitRecoveryShare = async (userPrincipal, shareId) => {
   try {
     const actor = await getActor();
-    const result = await actor.submitRecoveryShare(userPrincipal, shareId);
+    const principal = toPrincipal(userPrincipal);
+    
+    const result = await actor.submitRecoveryShare(principal, shareId);
     return result; // { ok: null } または { err: string }
   } catch (error) {
     console.error('Failed to submit recovery share:', error);
@@ -573,7 +591,9 @@ export const submitRecoveryShare = async (userPrincipal, shareId) => {
 export const getRecoveryStatus = async (userPrincipal) => {
   try {
     const actor = await getActor();
-    const result = await actor.getRecoveryStatus(userPrincipal);
+    const principal = toPrincipal(userPrincipal);
+    
+    const result = await actor.getRecoveryStatus(principal);
     
     if (result.err) {
       throw new Error(result.err);
@@ -647,38 +667,46 @@ export const getDevices = async () => {
 export const addDevice = async (deviceName) => {
   try {
     const actor = await getActor();
+    const principal = await getCurrentPrincipal();
     
-    // デバイス用の新しいキーペアを生成
-    const deviceKeyPair = await generateKeyPair(); // 非同期関数に注意
+    if (!principal) {
+      throw new Error('User principal not found');
+    }
     
-    // マスターキーを取得
-    const masterKey = localStorage.getItem('masterEncryptionKey');
+    // Get the user-specific master key
+    const principalStr = principal.toString();
+    const masterKey = getUserMasterKey(principalStr);
+    
     if (!masterKey) {
       throw new Error('Master encryption key not found');
     }
     
-    // マスターキーを新デバイスの公開鍵で暗号化
-    // マスターキーをダミーデータで暗号化するか、空のバイト配列を渡す
+    // Generate a new key pair for the device
+    const deviceKeyPair = await generateKeyPair();
+    
+    // Use dummy data for now - in a real implementation we'd encrypt the master key
+    // with the new device's public key
     const encryptedMasterKey = stringToBlob(JSON.stringify({dummy: true}));
 
     const result = await actor.addDevice(
       deviceName, 
       deviceKeyPair.publicKey,
-      encryptedMasterKey // ダミーデータを渡す
+      encryptedMasterKey
     );
     
     if (result.err) {
       throw new Error(result.err);
     }
     
-    // QRコードなどで新デバイスに秘密鍵を提供する情報を生成
+    // Generate setup information for QR code
     const deviceSetupInfo = {
       deviceId: result.ok,
       privateKey: deviceKeyPair.privateKey,
-      expiresAt: Date.now() + 1000 * 60 * 10 // 10分有効
+      userPrincipal: principalStr, // Include user principal for proper key storage
+      expiresAt: Date.now() + 1000 * 60 * 10 // 10 minutes validity
     };
     
-    // セットアップトークンを生成（QRコードに使用）
+    // Generate setup token (for QR code)
     const setupToken = btoa(JSON.stringify(deviceSetupInfo));
     
     return {
@@ -923,15 +951,27 @@ export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
     // キャニスター呼び出しを追加 - manageGuardian API を呼び出す
     const actor = await getActor();
     
+    // Convert string principal to Principal object
+    let principalObj;
+    try {
+      principalObj = Principal.fromText(inviterPrincipal);
+    } catch (principalError) {
+      console.error('Invalid principal format:', principalError);
+      throw new Error(`プリンシパルIDの形式が無効です: ${inviterPrincipal}`);
+    }
+    
+    // Get current principal for metadata
+    const currentPrincipal = await getCurrentPrincipal();
+    const currentPrincipalText = currentPrincipal ? currentPrincipal.toString() : '';
+    
     // キャニスターにガーディアン登録する
-    // 注意: この関数はmain.moに実装必要
     const result = await actor.manageGuardian(
-      inviterPrincipal,
-      { Add: null },     // Add アクション
-      null,              // 暗号化データ (不要)
-      JSON.stringify({   // メタデータとして連絡先情報を保存
+      principalObj,         // Principal object, not string
+      { Add: null },        // Add アクション
+      null,                 // 暗号化データ (不要)
+      JSON.stringify({      // メタデータとして連絡先情報を保存
         acceptedAt: Date.now(),
-        acceptedBy: await getCurrentPrincipal()
+        acceptedBy: currentPrincipalText
       })
     );
     
@@ -1018,24 +1058,27 @@ export const finalizeRecovery = async (userPrincipal, tempAccessPrincipal, publi
   }
 };
 
-export const setupDeviceLink = async (masterKey) => {
+export const setupDeviceLink = async () => {
   try {
-    // マスターキーを確認
+    const principal = await getCurrentPrincipal();
+    
+    if (!principal) {
+      throw new Error('User principal not found');
+    }
+    
+    const principalStr = principal.toString();
+    const masterKey = getUserMasterKey(principalStr);
+    
     if (!masterKey) {
-      const userPrincipal = await getCurrentPrincipal();
-      masterKey = getUserMasterKey(userPrincipal.toString());
-      if (!masterKey) {
-        throw new Error('マスターキーが見つかりません');
-      }
+      throw new Error('マスターキーが見つかりません');
     }
     
     const actor = await getActor();
     
-    // デバイス用の新しいキーペアを生成
+    // Generate new device key pair
     const deviceKeyPair = await generateKeyPair();
     
-    // この部分が重要：マスターキーを何らかの形でバックエンドに渡す
-    // 方法1: ダミーデータを渡す場合
+    // Use dummy data for encrypted master key
     const encryptedMasterKey = stringToBlob(JSON.stringify({dummy: true}));
     
     const result = await actor.addDevice(
@@ -1048,15 +1091,15 @@ export const setupDeviceLink = async (masterKey) => {
       throw new Error(result.err || "デバイス追加に失敗しました");
     }
     
-    // 連携データにマスターキーを直接含める
+    // Include user principal in the link data
     const linkData = {
       deviceId: result.ok,
-      masterKey: masterKey, // マスターキーを直接送信
-      userPrincipal: await getCurrentPrincipal(),
-      expiresAt: Date.now() + 10 * 60 * 1000 // 10分間有効
+      masterKey: masterKey,
+      userPrincipal: principalStr,
+      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes validity
     };
     
-    // JSON化してBase64エンコード
+    // Convert to Base64
     const linkToken = btoa(JSON.stringify(linkData));
     
     return { 
@@ -1069,6 +1112,7 @@ export const setupDeviceLink = async (masterKey) => {
   }
 };
 
+
 // 新デバイス側のprocessDeviceLinkResult関数 - シンプル版
 export const processDeviceLinkResult = async (scanResult) => {
   try {
@@ -1078,20 +1122,31 @@ export const processDeviceLinkResult = async (scanResult) => {
       throw new Error("QRコードの有効期限が切れています");
     }
     
-    // デバイスIDを保存
+    // Save device ID
     localStorage.setItem('deviceId', linkData.deviceId);
     
-    // マスターキーをLocalStorageに保存
+    // Ensure we have the user principal
+    if (!linkData.userPrincipal) {
+      throw new Error("ユーザー情報が不足しています");
+    }
+    
+    // Save the master key using the new user-specific approach
+    saveUserMasterKey(linkData.userPrincipal, linkData.masterKey);
+    
+    // For backward compatibility, also save to localStorage
     localStorage.setItem('masterEncryptionKey', linkData.masterKey);
     
-    // さらにIndexedDBにも保存（永続性のため）
+    // Save to IndexedDB for persistence
     try {
       const db = await openIndexedDB();
       await saveKeyToIndexedDB(db, 'masterEncryptionKey', linkData.masterKey);
+      // Also save the principal for future use
+      await saveKeyToIndexedDB(db, 'userPrincipal', linkData.userPrincipal);
     } catch (dbError) {
-      console.warn('IndexedDBへの保存に失敗しましたが、LocalStorageには保存されています:', dbError);
+      console.warn('IndexedDBへの保存に失敗しましたが、暗号化キーは保存されています:', dbError);
     }
     
+    console.log("デバイス連携が完了しました");
     return true;
   } catch (error) {
     console.error("QRコード処理エラー:", error);

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { addDevice } from '../../services/api';
 import { generateKeyPair } from '../../services/crypto';
+import { useAuth } from '../../context/AuthContext';
 
 function AddDevice({ onClose }) {
   const [deviceName, setDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const {user} = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,12 +19,14 @@ function AddDevice({ onClose }) {
         throw new Error('Device name is required');
       }
       
-      // Generate new device key pair
-      const deviceKeyPair = generateKeyPair();
+      if (!user || !user.principal) {
+        throw new Error('User authentication required');
+      }
       
-      // Add the new device
-      await addDevice(deviceName);
+      // Call the updated addDevice function
+      const result = await addDevice(deviceName);
       
+      console.log('Device added successfully:', result.deviceId);
       onClose();
     } catch (err) {
       console.error('Failed to add device:', err);

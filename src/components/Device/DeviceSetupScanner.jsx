@@ -90,25 +90,16 @@ function DeviceSetupScanner() {
     setError(null);
     
     try {
+      // Process the scanned QR code result
       const result = await processDeviceLinkResult(token);
       
-      /*
-      // セットアップトークンの有効期限チェック
-      if (Date.now() > setupData.expiresAt) {
-        throw new Error('セットアップトークンの有効期限が切れています。新しいQRコードを生成してください。');
-      }
-      
-      // 新しいデバイスのセットアップを実行
-      const result = await setupNewDevice(token);
-      */
-    
       if (!result) {
         throw new Error('デバイスのセットアップに失敗しました。もう一度試してください。');
       }
       
       setSuccess(true);
     
-      // セットアップ成功後、3秒後に自動的にノート一覧へ
+      // 3秒後にリダイレクト
       setTimeout(() => {
         navigate('/notes');
       }, 3000);
@@ -120,6 +111,7 @@ function DeviceSetupScanner() {
       setLoading(false);
     }
   };
+
 
   // 手動入力フォーム送信
   const handleSubmit = (e) => {
@@ -156,7 +148,7 @@ function DeviceSetupScanner() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">セットアップ完了!</h2>
-          <p className="text-gray-600 mb-6">このデバイスで暗号化されたノートにアクセスできるようになりました。</p>
+          <p className="text-gray-600 mb-6">このデバイスで暗号化されたノートにアクセスできるようになりました。(3秒待ってもリダイレクトしない場合は画面をリロードし、再度ログインしてください)</p>
           <div className="flex justify-center">
             <div className="bg-gray-100 text-gray-700 px-4 py-2 rounded">
               <Loading />
