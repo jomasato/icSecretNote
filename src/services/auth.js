@@ -213,7 +213,6 @@ export const login = async () => {
           
           if (!profileExists) {
             // 新規ユーザー: プロファイル作成
-            console.log('Profile not found, creating new profile');
             isNewUser = true;
             
             try {
@@ -224,7 +223,6 @@ export const login = async () => {
               // プロファイル作成失敗はユーザーに通知するが、ログインは続行
             }
           } else {
-            console.log('Existing user, account found');
             
             // 既存ユーザー: デバイスキーを保存
             localStorage.setItem('devicePrivateKey', deviceKeyPair.privateKey);

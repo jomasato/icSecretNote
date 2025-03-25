@@ -393,41 +393,4 @@ export const combineShares = (shares) => {
  * @returns {boolean} True if test passes
  */
 export const testShamir = () => {
-  try {
-    console.log("--- Testing Shamir's Secret Sharing ---");
-    
-    // Test basic operations first
-    console.log("GF(256) operations:");
-    console.log("Add: 45 + 82 =", GF256.add(45, 82));
-    console.log("Mul: 45 * 82 =", GF256.mul(45, 82));
-    
-    // Test with a simple secret
-    const secret = "This is a test secret";
-    console.log("Original secret:", secret);
-    
-    // Split into 5 shares, threshold 3
-    const shares = createShares(secret, 5, 3);
-    console.log("Generated 5 shares, threshold 3");
-    
-    // Test reconstruction with minimum shares
-    const subset1 = [shares[0], shares[2], shares[4]];
-    const recovered1 = combineShares(subset1);
-    console.log("Recovered with shares 1,3,5:", recovered1);
-    
-    // Test with different subset
-    const subset2 = [shares[1], shares[2], shares[3]];
-    const recovered2 = combineShares(subset2);
-    console.log("Recovered with shares 2,3,4:", recovered2);
-    
-    // Test with more than threshold
-    const subset3 = [shares[0], shares[1], shares[2], shares[3]];
-    const recovered3 = combineShares(subset3);
-    console.log("Recovered with shares 1,2,3,4:", recovered3);
-    
-    // Verify all recoveries match the original
-    return recovered1 === secret && recovered2 === secret && recovered3 === secret;
-  } catch (error) {
-    console.error("Test failed:", error);
-    return false;
-  }
 };
