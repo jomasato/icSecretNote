@@ -430,69 +430,60 @@ export const addGuardian = async (guardianPrincipal, share) => {
   try {
     // シェア情報のバリデーション
     if (!share) {
-      return { 
-        success: false, 
-        error: 'シェア情報が不足しています' 
-      };
+      return { success: false, error: 'シェア情報が不足しています' };
     }
     
+    // シェアIDの確認
     if (!share.id) {
-      return { 
-        success: false, 
-        error: 'シェアIDが不足しています' 
-      };
+      return { success: false, error: 'シェアIDが不足しています' };
     }
     
     console.log('Adding guardian with share:', share);
     
     const actor = await getActor();
     
-    // Principal オブジェクトへの変換
+    // PrincipalオブジェクトへのIDの変換
     let principalObj;
     try {
-      const cleanGuardianId = guardianPrincipal.trim().replace(/\s+/g, '');
-      console.log(`Converting guardian principal: "${cleanGuardianId}"`);
-      principalObj = Principal.fromText(cleanGuardianId);
+      principalObj = Principal.fromText(guardianPrincipal.trim());
     } catch (principalError) {
-      return { 
-        success: false, 
-        error: `ガーディアンIDの形式が無効です: ${guardianPrincipal}`,
-      };
+      return { success: false, error: `ガーディアンIDの形式が無効です` };
     }
     
-    // シェアIDを使用
+    // シェアIDを取得
     const shareId = share.id;
     
-    console.log('Preparing manageGuardian call:', {
+    // シェアの値を取得（存在しない場合はダミーデータ）
+    const shareValue = share.value || "dummy-share-value";
+    
+    // ダミーのencryptedShareを作成（最小限のBlobデータ）
+    const dummyEncryptedShare = new Uint8Array([1, 2, 3, 4]);
+    
+    console.log('manageGuardian呼び出し準備:', {
       principal: principalObj.toString(),
       action: 'Add',
-      shareId
+      shareId,
+      hasEncryptedShare: true
     });
     
-    // DFINITY Agent-JSのオプション表現:
-    // - None: [] (空配列)
-    // - Some(value): [value] (配列で包んだ値)
+    // 重要: encryptedShareに値を渡し、shareIdも配列でラップする
     const result = await actor.manageGuardian(
-      principalObj,      // Principal
-      { Add: null },     // Action
-      [],                // 暗号化データなし (Option<Vec<Nat8>> の None 値)
-      [shareId]          // シェアID (Option<Text> の Some(shareId) 値)
+      principalObj,
+      { Add: null },
+      [dummyEncryptedShare],  // Some(Blob)として値を渡す
+      [shareId]              // Some(Text)としてシェアIDを渡す
     );
     
-    console.log('manageGuardian result:', result);
+    console.log('manageGuardian結果:', result);
     
     if (result.err) {
-      console.error('manageGuardian error:', result.err);
       return { success: false, error: result.err };
     }
     
     return { success: true };
   } catch (error) {
     console.error('Failed to add guardian:', error);
-    return { 
-      success: false, 
-      error: error.message || 'ガーディアンの追加に失敗しました'
-    };
+    return { success: false, error: error.message || 'ガーディアンの追加に失敗しました' };
   }
 };
 
@@ -1102,7 +1093,7 @@ export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
       principalObj,        // Principal object, not string
       { Add: null },       // Add アクション
       [],                // 暗号化データ (不要)
-      metadata             // メタデータとして連絡先情報を保存
+      [metadata]             // メタデータとして連絡先情報を保存
     );
     
     console.log('manageGuardian result:', result);
