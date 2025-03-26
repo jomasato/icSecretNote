@@ -50,25 +50,37 @@ function AddGuardian({ onClose, availableShares }) {
       setLoading(true);
       try {
         if (!selectedShare) {
-          throw new Error('Please select a share to assign to this guardian');
+          throw new Error('このガーディアンに割り当てるシェアを選択してください');
         }
         
-        // ガーディアン追加とシェア割り当て（公開鍵暗号化なしで直接シェアを保存）
+        console.log('Selected share for guardian:', selectedShare);
+        
+        // 選択されたシェアが正しいオブジェクトか確認
+        if (!selectedShare.id) {
+          console.error('Invalid share object:', selectedShare);
+          throw new Error('選択されたシェアの形式が無効です');
+        }
+        
+        // ガーディアン追加とシェア割り当て
         const result = await addGuardian(guardianId, selectedShare);
         
         if (!result.success) {
-          throw new Error(result.error || 'Failed to add guardian');
+          console.error('Guardian addition failed:', result);
+          throw new Error(result.error || 'ガーディアンの追加に失敗しました');
         }
         
         // 利用可能なシェアを更新（使用済みシェアを除外）
         const updatedShares = recoveryShares.filter(share => share.id !== selectedShare.id);
         localStorage.setItem('recoveryShares', JSON.stringify(updatedShares));
         
+        // 成功メッセージの表示
+        console.log('Guardian added successfully!');
+        
         // モーダルを閉じる
         onClose();
       } catch (err) {
-        console.error('Failed to add guardian:', err);
-        setError(err.message || 'Failed to add guardian. Please try again.');
+        console.error('Error during guardian addition:', err);
+        setError(err.message || 'ガーディアンの追加に失敗しました。もう一度お試しください。');
       } finally {
         setLoading(false);
       }
@@ -101,9 +113,7 @@ function AddGuardian({ onClose, availableShares }) {
       {step === 1 && (
         <>
           <p className="text-gray-600 mb-4">
-            Enter the Internet Identity principal of the person you want to add as a guardian.
-            You can get this from them directly.
-          </p>
+          ガーディアンとして追加する人のインターネット ID プリンシパルを入力てください。これは、ガーディアンとなる方に直接問い合わせて下さい </p>
           
           <form onSubmit={handleSubmit}>
           <div className="mb-4">

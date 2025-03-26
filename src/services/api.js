@@ -419,29 +419,80 @@ export const getGuardians = async () => {
  * @param {Object} share - ガーディアンに割り当てるシェア
  * @returns {boolean} 成功した場合はtrue
  */
+/**
+ * ガーディアンを追加し、シェアを割り当て
+ * @param {string} guardianPrincipal - ガーディアンのプリンシパルID
+ * @param {Object} share - ガーディアンに割り当てるシェア
+ * @returns {Object} 成功した場合は {success: true}
+ */
+
 export const addGuardian = async (guardianPrincipal, share) => {
   try {
+    // シェア情報のバリデーション
+    if (!share) {
+      return { 
+        success: false, 
+        error: 'シェア情報が不足しています' 
+      };
+    }
+    
+    if (!share.id) {
+      return { 
+        success: false, 
+        error: 'シェアIDが不足しています' 
+      };
+    }
+    
+    console.log('Adding guardian with share:', share);
+    
     const actor = await getActor();
     
-    // シェア情報をそのまま保存
-    console.log(`Adding guardian ${guardianPrincipal} with share ID: ${share.id}`);
+    // Principal オブジェクトへの変換
+    let principalObj;
+    try {
+      const cleanGuardianId = guardianPrincipal.trim().replace(/\s+/g, '');
+      console.log(`Converting guardian principal: "${cleanGuardianId}"`);
+      principalObj = Principal.fromText(cleanGuardianId);
+    } catch (principalError) {
+      return { 
+        success: false, 
+        error: `ガーディアンIDの形式が無効です: ${guardianPrincipal}`,
+      };
+    }
     
-    // manageGuardian関数を呼び出し（暗号化なし）
+    // シェアIDを使用
+    const shareId = share.id;
+    
+    console.log('Preparing manageGuardian call:', {
+      principal: principalObj.toString(),
+      action: 'Add',
+      shareId
+    });
+    
+    // DFINITY Agent-JSのオプション表現:
+    // - None: [] (空配列)
+    // - Some(value): [value] (配列で包んだ値)
     const result = await actor.manageGuardian(
-      guardianPrincipal,
-      { Add: null },
-      null, // 暗号化データはnull
-      share.id  // シェアIDを引き渡す
+      principalObj,      // Principal
+      { Add: null },     // Action
+      [],                // 暗号化データなし (Option<Vec<Nat8>> の None 値)
+      [shareId]          // シェアID (Option<Text> の Some(shareId) 値)
     );
     
+    console.log('manageGuardian result:', result);
+    
     if (result.err) {
-      throw new Error(result.err);
+      console.error('manageGuardian error:', result.err);
+      return { success: false, error: result.err };
     }
     
     return { success: true };
   } catch (error) {
     console.error('Failed to add guardian:', error);
-    return { success: false, error: error.message };
+    return { 
+      success: false, 
+      error: error.message || 'ガーディアンの追加に失敗しました'
+    };
   }
 };
 
@@ -457,8 +508,8 @@ export const removeGuardian = async (guardianPrincipal) => {
     const result = await actor.manageGuardian(
       guardianPrincipal,
       { Remove: null },
-      null,
-      null
+      [],
+      []
     );
     
     if (result.err) {
@@ -870,8 +921,7 @@ export const collectRecoveryData = async (userPrincipal) => {
  */
 export const generateInvitationToken = async (userPrincipal) => {
   try {
-    // この実装はモックバージョンです。実際のアプリでは、バックエンドでトークンを生成します。
-    // ここでは、フロントエンドでのトークン生成をシミュレートします。
+
     const token = btoa(JSON.stringify({
       inviterPrincipal: userPrincipal,
       createdAt: Date.now(),
@@ -898,35 +948,79 @@ export const generateInvitationToken = async (userPrincipal) => {
  */
 export const verifyInvitationToken = async (token, principalId) => {
   try {
+    console.log('verifyInvitationToken called with:', {
+      tokenLength: token ? token.length : 0,
+      principalId
+    });
+    
+    if (!token) {
+      return {
+        valid: false,
+        error: '招待トークンが見つかりません'
+      };
+    }
+    
+    // Try to sanitize the principal if needed
+    let cleanPrincipalId = principalId;
+    if (principalId.includes(' ') || principalId.includes('\n') || principalId.includes('\t')) {
+      cleanPrincipalId = principalId.trim().replace(/\s+/g, '');
+      console.log(`Sanitized principal for verification: "${cleanPrincipalId}"`);
+    }
+    
     // トークンのデコード
-    const decoded = JSON.parse(atob(token));
-    
-    // 有効期限の確認
-    if (decoded.expiresAt < Date.now()) {
+    try {
+      const decoded = JSON.parse(atob(token));
+      console.log('Decoded token:', decoded);
+      
+      // 有効期限の確認
+      if (decoded.expiresAt < Date.now()) {
+        console.log('Token expired:', {
+          expiresAt: new Date(decoded.expiresAt).toISOString(),
+          now: new Date().toISOString()
+        });
+        return {
+          valid: false,
+          error: '招待トークンの有効期限が切れています'
+        };
+      }
+      
+      // プリンシパルIDの確認 - Be more lenient in comparison
+      if (decoded.inviterPrincipal !== cleanPrincipalId) {
+        console.log('Principal mismatch:', {
+          tokenPrincipal: decoded.inviterPrincipal,
+          requestPrincipal: cleanPrincipalId
+        });
+        
+        // Try case-insensitive comparison as fallback
+        if (decoded.inviterPrincipal.toLowerCase() !== cleanPrincipalId.toLowerCase()) {
+          return {
+            valid: false,
+            error: '招待トークンが無効です（プリンシパルIDが一致しません）'
+          };
+        } else {
+          console.log('Principal matched case-insensitively');
+        }
+      }
+      
+      // 有効な場合、トークン情報を返す
+      return {
+        valid: true,
+        inviterPrincipal: decoded.inviterPrincipal,
+        createdAt: decoded.createdAt,
+        expiresAt: decoded.expiresAt,
+        id: decoded.id,
+        inviterName: decoded.inviterName || null
+      };
+    } catch (decodeErr) {
+      console.error('Token decode error:', decodeErr);
       return {
         valid: false,
-        error: '招待トークンの有効期限が切れています'
+        error: '招待トークンの形式が無効です'
       };
     }
-    
-    // プリンシパルIDの確認
-    if (decoded.inviterPrincipal !== principalId) {
-      return {
-        valid: false,
-        error: '招待トークンが無効です（プリンシパルIDが一致しません）'
-      };
-    }
-    
-    // 有効な場合、トークン情報を返す
-    return {
-      valid: true,
-      inviterPrincipal: decoded.inviterPrincipal,
-      createdAt: decoded.createdAt,
-      expiresAt: decoded.expiresAt,
-      id: decoded.id
-    };
   } catch (err) {
     console.error('Failed to verify invitation token:', err);
+    console.error('Error stack:', err.stack);
     return {
       valid: false,
       error: '招待トークンの検証に失敗しました'
@@ -942,47 +1036,91 @@ export const verifyInvitationToken = async (token, principalId) => {
  */
 export const acceptGuardianInvitation = async (token, inviterPrincipal) => {
   try {
+    console.log('API: acceptGuardianInvitation called with:', {
+      tokenLength: token ? token.length : 0,
+      inviterPrincipal
+    });
+    
     // トークン検証（既存コード）
     const verification = await verifyInvitationToken(token, inviterPrincipal);
+    console.log('Token verification result:', verification);
+    
     if (!verification.valid) {
-      throw new Error(verification.error);
+      console.error('Token verification failed:', verification.error);
+      return { success: false, error: verification.error };
     }
     
     // キャニスター呼び出しを追加 - manageGuardian API を呼び出す
     const actor = await getActor();
+    console.log('Got actor, calling manageGuardian');
     
     // Convert string principal to Principal object
     let principalObj;
     try {
-      principalObj = Principal.fromText(inviterPrincipal);
+      // Log the exact principal string before conversion
+      console.log(`Converting principal string: "${inviterPrincipal}"`);
+      
+      // Try to determine if we need to sanitize the principal
+      if (inviterPrincipal.includes(' ') || inviterPrincipal.includes('\n') || inviterPrincipal.includes('\t')) {
+        const cleaned = inviterPrincipal.trim().replace(/\s+/g, '');
+        console.log(`Sanitized principal: "${cleaned}"`);
+        principalObj = Principal.fromText(cleaned);
+      } else {
+        principalObj = Principal.fromText(inviterPrincipal);
+      }
+      
+      console.log('Principal successfully converted to object');
     } catch (principalError) {
       console.error('Invalid principal format:', principalError);
-      throw new Error(`プリンシパルIDの形式が無効です: ${inviterPrincipal}`);
+      console.error('Error stack:', principalError.stack);
+      return { 
+        success: false, 
+        error: `プリンシパルIDの形式が無効です: ${inviterPrincipal}`,
+        details: principalError.message
+      };
     }
     
     // Get current principal for metadata
     const currentPrincipal = await getCurrentPrincipal();
     const currentPrincipalText = currentPrincipal ? currentPrincipal.toString() : '';
+    console.log('Current principal:', currentPrincipalText);
+    
+    // Prepare metadata
+    const metadata = JSON.stringify({
+      acceptedAt: Date.now(),
+      acceptedBy: currentPrincipalText
+    });
+    
+    console.log('Calling manageGuardian with:', {
+      principalObj: principalObj.toString(),
+      action: 'Add',
+      metadata: metadata
+    });
     
     // キャニスターにガーディアン登録する
     const result = await actor.manageGuardian(
-      principalObj,         // Principal object, not string
-      { Add: null },        // Add アクション
-      null,                 // 暗号化データ (不要)
-      JSON.stringify({      // メタデータとして連絡先情報を保存
-        acceptedAt: Date.now(),
-        acceptedBy: currentPrincipalText
-      })
+      principalObj,        // Principal object, not string
+      { Add: null },       // Add アクション
+      [],                // 暗号化データ (不要)
+      metadata             // メタデータとして連絡先情報を保存
     );
     
+    console.log('manageGuardian result:', result);
+    
     if (result.err) {
-      throw new Error(result.err);
+      console.error('manageGuardian error:', result.err);
+      return { success: false, error: result.err };
     }
     
     return { success: true };
   } catch (err) {
     console.error('Failed to accept guardian invitation:', err);
-    return { success: false, error: err.message };
+    console.error('Error stack:', err.stack);
+    return { 
+      success: false, 
+      error: err.message,
+      stack: err.stack 
+    };
   }
 };
 
@@ -1232,8 +1370,8 @@ export const updateGuardianInfo = async (guardianPrincipal, info) => {
     const result = await actor.manageGuardian(
       guardianPrincipal,
       { Replace: null },  // 更新アクション
-      null,               // 暗号化シェアデータ (不要)
-      contactInfo         // 連絡先情報
+      [],               // 暗号化シェアデータ (不要)
+      [contactInfo]         // 連絡先情報
     );
     
     if (result.err) {

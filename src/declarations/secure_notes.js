@@ -2,6 +2,7 @@ export const idlFactory = ({ IDL }) => {
   const DeviceId = IDL.Text;
   const Result_8 = IDL.Variant({ 'ok' : DeviceId, 'err' : IDL.Text });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
+  const Result_10 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const RecoveryStatus = IDL.Variant({
     'ApprovalComplete' : IDL.Null,
     'Failed' : IDL.Null,
@@ -81,12 +82,15 @@ export const idlFactory = ({ IDL }) => {
         [Result_8],
         [],
       ),
+    'addCycles' : IDL.Func([], [], []),
     'addDevice' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
         [Result_8],
         [],
       ),
     'approveRecovery' : IDL.Func([IDL.Principal], [Result], []),
+    'availableCycles' : IDL.Func([], [IDL.Nat], ['query']),
+    'checkCycleBalance' : IDL.Func([], [Result_10], ['query']),
     'collectRecoveryData' : IDL.Func([IDL.Principal], [Result_9], []),
     'createProfile' : IDL.Func([IDL.Nat, IDL.Nat], [Result], []),
     'createProfileWithDevice' : IDL.Func(
