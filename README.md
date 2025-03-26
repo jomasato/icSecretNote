@@ -66,6 +66,4 @@ Secure Notesは、エンドツーエンド暗号化されたノートを安全�
 ---
 
 詳細な情報や最新の更新については、プロジェクトのドキュメントを参照してください。
-### `npm run build` fails to minify
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify
