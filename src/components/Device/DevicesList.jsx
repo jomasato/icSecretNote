@@ -199,7 +199,8 @@ function DevicesList() {
           <div className="bg-white shadow-md rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">デバイス管理について</h2>
             <p className="text-gray-600 mb-4">
-              デバイスは、セキュアノートにアクセスするために使用する物理的なハードウェアです。各デバイスには独自の暗号化キーがあります。
+              デバイスは、セキュアノートにアクセスするために使用する物理的なハードウェアです。
+              デバイス内にマスターキーが保管されており、セキュアノートの復号を行います
             </p>
             <ul className="list-disc list-inside text-gray-600 mb-4">
               <li>各デバイスは独立してノートを復号できます</li>
