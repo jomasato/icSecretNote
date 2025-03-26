@@ -161,6 +161,7 @@ function GuardiansList() {
 <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">ガーディアン管理</h1>
         <div className="flex flex-row items-center gap-4">
+          {/* バグ検知のためコメントアウト
           <button
             onClick={handleShowInvitation}
             className="inline-block bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-3 md:px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
@@ -172,6 +173,7 @@ function GuardiansList() {
               <span>招待を送信</span>
             </div>
           </button>
+          */}
           <button
             onClick={handleAddGuardian}
             className="inline-block bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 md:px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
@@ -180,7 +182,7 @@ function GuardiansList() {
               <svg className="h-5 w-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              <span>手動で追加</span>
+              <span>招待を送信</span>
             </div>
           </button>
         </div>
